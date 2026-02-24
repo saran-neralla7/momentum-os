@@ -1,24 +1,62 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, CheckCircle2, Circle, Flame, Activity, X, PenLine, Heart } from 'lucide-react';
 import { hapticFeedback } from '@/lib/utils';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
-
-const habits = [
-    { id: 1, title: 'Morning Workout', streak: 12, completed: true, category: 'Health', stats: { completed: 9, days: 30 } },
-    { id: 2, title: 'Drink Water', streak: 5, completed: false, category: 'Health', stats: { completed: 3, days: 7 } },
-    { id: 3, title: 'Read 20 pages', streak: 8, completed: false, category: 'Study', stats: { completed: 8, days: 30 } },
-    { id: 4, title: 'Code for 2 hours', streak: 28, completed: true, category: 'Coding', stats: { completed: 28, days: 30 } },
-];
+import { supabase } from '@/lib/supabase';
 
 export default function HabitsPage() {
-    const [items, setItems] = useState(habits);
-    const [contextModalOpen, setContextModalOpen] = useState<{ isOpen: boolean, habitId: number | null }>({ isOpen: false, habitId: null });
+    const [items, setItems] = useState<any[]>([]);
+    const [contextModalOpen, setContextModalOpen] = useState<{ isOpen: boolean, habitId: string | number | null }>({ isOpen: false, habitId: null });
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newHabitTitle, setNewHabitTitle] = useState('');
 
-    const toggleHabit = (id: number) => {
+    useEffect(() => {
+        const fetchHabits = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase.from('habits').select('*').eq('user_id', user.id);
+                if (data) {
+                    setItems(data.map(d => ({
+                        id: d.id,
+                        title: d.title,
+                        streak: 0,
+                        completed: false,
+                        category: d.category || 'General',
+                        stats: { completed: 0, days: 30 }
+                    })));
+                }
+            }
+        };
+        fetchHabits();
+    }, []);
+
+    const handleAddHabit = async () => {
+        hapticFeedback.light();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && newHabitTitle.trim() !== '') {
+            const { data, error } = await supabase.from('habits').insert([
+                { user_id: user.id, title: newHabitTitle, frequency: 'daily', category: 'Health' }
+            ]).select();
+
+            if (data && data.length > 0) {
+                setItems([...items, {
+                    id: data[0].id,
+                    title: data[0].title,
+                    streak: 0,
+                    completed: false,
+                    category: data[0].category,
+                    stats: { completed: 0, days: 30 }
+                }]);
+                setNewHabitTitle('');
+                setShowAddModal(false);
+            }
+        }
+    };
+    const toggleHabit = async (id: string | number) => {
         hapticFeedback.light();
         setItems(items.map(h => {
             if (h.id === id) {
@@ -48,7 +86,8 @@ export default function HabitsPage() {
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md"
+                        onClick={() => setShowAddModal(true)}
+                        className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
                     >
                         <Plus className="h-5 w-5" />
                     </motion.button>
@@ -106,10 +145,13 @@ export default function HabitsPage() {
                                     drag="x"
                                     dragConstraints={{ left: -100, right: 0 }}
                                     dragElastic={0.1}
-                                    onDragEnd={(e, info) => {
+                                    onDragEnd={async (e, info) => {
                                         if (info.offset.x < -80) {
-                                            setItems(items.filter(h => h.id !== habit.id));
-                                            hapticFeedback.heavy();
+                                            const { error } = await supabase.from('habits').delete().eq('id', habit.id);
+                                            if (!error) {
+                                                setItems(items.filter(h => h.id !== habit.id));
+                                                hapticFeedback.heavy();
+                                            }
                                         }
                                     }}
                                     initial={{ opacity: 0, y: 10 }}
@@ -199,6 +241,50 @@ export default function HabitsPage() {
                                 >
                                     Log Context
                                 </button>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Add Habit Modal */}
+                <AnimatePresence>
+                    {showAddModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 100 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 100 }}
+                                className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
+                            >
+                                <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary">
+                                    <X className="h-4 w-4" />
+                                </button>
+                                <h2 className="text-xl font-bold tracking-tight mb-4">New Habit</h2>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-sm font-medium text-muted-foreground ml-1">Habit Name</label>
+                                        <input
+                                            type="text"
+                                            value={newHabitTitle}
+                                            onChange={(e) => setNewHabitTitle(e.target.value)}
+                                            className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+                                            placeholder="E.g., Read 10 Pages..."
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleAddHabit}
+                                        disabled={!newHabitTitle}
+                                        className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                                    >
+                                        Create Habit
+                                    </button>
+                                </div>
                             </motion.div>
                         </motion.div>
                     )}

@@ -43,6 +43,17 @@ create table public.budgets (
   unique(user_id, category)
 );
 
+-- TASKS TABLE
+create table public.tasks (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users(id) not null,
+  title text not null,
+  due_time timestamp with time zone not null,
+  completed boolean default false not null,
+  category text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- ROW LEVEL SECURITY (RLS) POLICIES
 
 -- Enable RLS for all tables
@@ -50,6 +61,7 @@ alter table public.habits enable row level security;
 alter table public.habit_logs enable row level security;
 alter table public.expenses enable row level security;
 alter table public.budgets enable row level security;
+alter table public.tasks enable row level security;
 
 -- Policies for Habits
 create policy "Users can view their own habits" on public.habits for select using (auth.uid() = user_id);
@@ -84,8 +96,16 @@ create policy "Users can insert their own budgets" on public.budgets for insert 
 create policy "Users can update their own budgets" on public.budgets for update using (auth.uid() = user_id);
 create policy "Users can delete their own budgets" on public.budgets for delete using (auth.uid() = user_id);
 
+-- Policies for Tasks
+create policy "Users can view their own tasks" on public.tasks for select using (auth.uid() = user_id);
+create policy "Users can insert their own tasks" on public.tasks for insert with check (auth.uid() = user_id);
+create policy "Users can update their own tasks" on public.tasks for update using (auth.uid() = user_id);
+create policy "Users can delete their own tasks" on public.tasks for delete using (auth.uid() = user_id);
+
 -- INDEXES FOR PERFORMANCE
 create index idx_habits_user on public.habits(user_id);
 create index idx_habit_logs_habit on public.habit_logs(habit_id);
 create index idx_expenses_user on public.expenses(user_id);
 create index idx_budgets_user on public.budgets(user_id);
+create index idx_tasks_user on public.tasks(user_id);
+create index idx_tasks_due_time on public.tasks(due_time);

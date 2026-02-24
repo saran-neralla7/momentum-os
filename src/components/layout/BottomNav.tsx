@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, ListTodo, PieChart, User, CloudOff } from 'lucide-react';
+import { Home, ListTodo, PieChart, User, CloudOff, CheckSquare } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +10,7 @@ import { useLanguage } from '@/lib/LanguageContext';
 const navItemsKeys = [
     { key: 'dashboard', href: '/', icon: Home },
     { key: 'habits', href: '/habits', icon: ListTodo },
+    { key: 'tasks', href: '/tasks', icon: CheckSquare },
     { key: 'expenses', href: '/expenses', icon: PieChart },
     { key: 'profile', href: '/profile', icon: User },
 ];

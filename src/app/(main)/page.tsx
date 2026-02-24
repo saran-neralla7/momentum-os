@@ -8,34 +8,45 @@ import { Share, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useLanguage } from '@/lib/LanguageContext';
-
-const expenseData = [
-    { name: '1', value: 120 },
-    { name: '5', value: 400 },
-    { name: '10', value: 50 },
-    { name: '15', value: 300 },
-    { name: '20', value: 800 },
-    { name: '25', value: 200 },
-    { name: '30', value: 900 },
-];
+import { supabase } from '@/lib/supabase';
 
 export default function DashboardPage() {
     const { t } = useLanguage();
     const [greeting, setGreeting] = useState('');
     const [showAiInsight, setShowAiInsight] = useState(false);
     const [activeRoast, setActiveRoast] = useState('roast_1');
+    const [score, setScore] = useState(0);
+    const [monthlyExpense, setMonthlyExpense] = useState(0);
+    const [expenseData, setExpenseData] = useState<any[]>([]);
     const dashboardRef = useRef<HTMLDivElement>(null);
-
-    // Mock data for calculation
-    const mockHabits = [
-        { streak: 12, completed: true },
-        { streak: 5, completed: false },
-        { streak: 28, completed: true }
-    ];
-    const score = calculateMomentumScore(mockHabits, 1240, 3000);
 
     useEffect(() => {
         setGreeting(getDynamicGreeting());
+
+        const fetchDashboardData = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Fetch expenses
+                const { data: expenses } = await supabase.from('expenses').select('amount, date').eq('user_id', user.id).order('date', { ascending: true });
+                let totalExp = 0;
+                let chartPoints: any[] = [];
+                if (expenses) {
+                    totalExp = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+                    chartPoints = expenses.map(e => ({ name: new Date(e.date).getDate().toString(), value: Number(e.amount) }));
+                }
+                setMonthlyExpense(totalExp);
+                setExpenseData(chartPoints);
+
+                // Fetch habits
+                const { data: habits } = await supabase.from('habits').select('*').eq('user_id', user.id);
+                if (habits) {
+                    // Approximate a score for the user based on raw count for now
+                    const mappedHabits = habits.map(h => ({ streak: 1, completed: true }));
+                    setScore(calculateMomentumScore(mappedHabits, totalExp, 3000));
+                }
+            }
+        };
+        fetchDashboardData();
     }, []);
 
     const exportDashboard = async () => {
@@ -105,7 +116,7 @@ export default function DashboardPage() {
                     >
                         <p className="text-sm text-muted-foreground font-medium">Spent</p>
                         <div>
-                            <div className="text-3xl font-semibold">₹1.2k</div>
+                            <div className="text-3xl font-semibold">₹{monthlyExpense.toLocaleString()}</div>
                             <p className="text-xs text-muted-foreground mt-1">of ₹3k budget</p>
                         </div>
                     </motion.div>

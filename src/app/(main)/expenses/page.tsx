@@ -1,17 +1,53 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Plus, Coffee, ShoppingBag, Car, Home as HomeIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Coffee, ShoppingBag, Car, Home as HomeIcon, X, DollarSign } from 'lucide-react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-
-const expenseCategories = [
-    { name: 'Food & Dining', value: 450, fill: '#4F46E5', icon: Coffee },
-    { name: 'Shopping', value: 300, fill: '#0EA5E9', icon: ShoppingBag },
-    { name: 'Transport', value: 150, fill: '#10B981', icon: Car },
-    { name: 'Housing', value: 340, fill: '#F59E0B', icon: HomeIcon },
-];
+import { supabase } from '@/lib/supabase';
+import { hapticFeedback } from '@/lib/utils';
 
 export default function ExpensesPage() {
+    const [expenses, setExpenses] = useState<any[]>([]);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+    const [category, setCategory] = useState('Food & Dining');
+    const [monthlyTotal, setMonthlyTotal] = useState(0);
+
+    useEffect(() => {
+        const fetchExpenses = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data } = await supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false });
+                if (data) {
+                    setExpenses(data);
+                    const total = data.reduce((sum, exp) => sum + Number(exp.amount), 0);
+                    setMonthlyTotal(total);
+                }
+            }
+        };
+        fetchExpenses();
+    }, []);
+
+    const handleAddExpense = async () => {
+        hapticFeedback.light();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && amount && description) {
+            const { data, error } = await supabase.from('expenses').insert([
+                { user_id: user.id, amount: Number(amount), category, description, date: new Date().toISOString() }
+            ]).select();
+
+            if (data) {
+                const newExpenses = [data[0], ...expenses];
+                setExpenses(newExpenses);
+                setMonthlyTotal(newExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0));
+                setAmount('');
+                setDescription('');
+                setShowAddModal(false);
+            }
+        }
+    };
     return (
         <div className="p-6 pt-12 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-lg mx-auto">
             <header className="flex justify-between items-end">
@@ -22,7 +58,8 @@ export default function ExpensesPage() {
                 <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md"
+                    onClick={() => setShowAddModal(true)}
+                    className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
                 >
                     <Plus className="h-5 w-5" />
                 </motion.button>
@@ -32,7 +69,7 @@ export default function ExpensesPage() {
             <div className="p-6 rounded-3xl bg-card border border-border/50 shadow-sm flex items-center justify-between">
                 <div>
                     <p className="text-sm font-medium text-muted-foreground">This Month</p>
-                    <div className="text-3xl font-semibold mt-1">₹1,240<span className="text-xl text-muted-foreground">.00</span></div>
+                    <div className="text-3xl font-semibold mt-1">₹{monthlyTotal.toLocaleString()}<span className="text-xl text-muted-foreground">.00</span></div>
                 </div>
                 <div className="bg-card p-4 rounded-3xl border border-border/50 shadow-sm">
                     <p className="text-sm font-medium text-muted-foreground">Budget Limit</p>
@@ -111,7 +148,7 @@ export default function ExpensesPage() {
                             innerRadius="30%"
                             outerRadius="100%"
                             barSize={12}
-                            data={expenseCategories}
+                            data={[{ name: 'Spent', value: monthlyTotal || 1, fill: '#4F46E5' }]}
                             startAngle={90}
                             endAngle={-270}
                         >
@@ -141,33 +178,97 @@ export default function ExpensesPage() {
                     <span className="text-xs text-primary cursor-pointer hover:underline">View All</span>
                 </h3>
                 <div className="space-y-3">
-                    {expenseCategories.map((expense, i) => {
-                        const Icon = expense.icon;
-                        return (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.1 }}
-                                className="p-4 rounded-2xl bg-card border border-border/50 shadow-sm flex items-center justify-between m-1"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2 rounded-xl" style={{ backgroundColor: `${expense.fill}20`, color: expense.fill }}>
-                                        <Icon className="h-5 w-5" />
+                    {expenses.length === 0 ? (
+                        <div className="p-4 text-center text-muted-foreground text-sm border border-dashed border-border/50 rounded-2xl">
+                            No expenses yet. Tap + to add one.
+                        </div>
+                    ) : (
+                        expenses.slice(0, 5).map((expense, i) => {
+                            let Icon = DollarSign;
+                            let color = '#4F46E5';
+                            if (expense.category === 'Food & Dining') { Icon = Coffee; color = '#F59E0B'; }
+                            if (expense.category === 'Shopping') { Icon = ShoppingBag; color = '#0EA5E9'; }
+
+                            return (
+                                <motion.div
+                                    key={expense.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: i * 0.1 }}
+                                    className="p-4 rounded-2xl bg-card border border-border/50 shadow-sm flex items-center justify-between m-1"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-2 rounded-xl" style={{ backgroundColor: `${color}20`, color: color }}>
+                                            <Icon className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-sm">{expense.description}</h4>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{new Date(expense.date).toLocaleDateString()}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-medium">{expense.name}</h4>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Today, 2:40 PM</p>
+                                    <div className="font-semibold text-right">
+                                        -₹{expense.amount}
                                     </div>
-                                </div>
-                                <div className="font-semibold text-right">
-                                    -₹{expense.value}
-                                </div>
-                            </motion.div>
-                        );
-                    })}
+                                </motion.div>
+                            );
+                        })
+                    )}
                 </div>
             </div>
+
+            {/* Add Expense Modal */}
+            <AnimatePresence>
+                {showAddModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 100 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 100 }}
+                            className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
+                        >
+                            <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary">
+                                <X className="h-4 w-4" />
+                            </button>
+                            <h2 className="text-xl font-bold tracking-tight mb-4">New Expense</h2>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground ml-1">Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+                                        placeholder="0.00"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground ml-1">Description</label>
+                                    <input
+                                        type="text"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+                                        placeholder="Coffee, Groceries..."
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleAddExpense}
+                                    disabled={!amount || !description}
+                                    className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50 mt-2"
+                                >
+                                    Log Expense
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

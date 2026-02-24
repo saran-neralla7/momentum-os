@@ -2,8 +2,30 @@
 
 import { LogOut, Moon, Sun, Download, Trash2, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
+    const [userEmail, setUserEmail] = useState<string | null>(null);
+    const router = useRouter();
+
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserEmail(user.email || null);
+            } else {
+                router.push('/login');
+            }
+        };
+        fetchUser();
+    }, [router]);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+    };
     return (
         <div className="p-6 pt-12 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-lg mx-auto">
             <header>
@@ -12,12 +34,14 @@ export default function ProfilePage() {
 
             {/* User Card */}
             <div className="p-6 rounded-3xl bg-primary/10 border border-primary/20 flex items-center gap-5">
-                <div className="h-16 w-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xl font-medium shadow-lg">
-                    S
+                <div className="h-16 w-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xl font-medium shadow-lg uppercase">
+                    {userEmail ? userEmail.charAt(0) : ''}
                 </div>
                 <div>
-                    <h2 className="text-xl font-semibold">Saran</h2>
-                    <p className="text-muted-foreground text-sm">saran@apple.com</p>
+                    <h2 className="text-xl font-semibold capitalize">
+                        {userEmail ? userEmail.split('@')[0] : 'Loading...'}
+                    </h2>
+                    <p className="text-muted-foreground text-sm">{userEmail}</p>
                 </div>
             </div>
 
@@ -74,7 +98,10 @@ export default function ProfilePage() {
                             </div>
                             <ChevronRight className="h-5 w-5 text-muted-foreground" />
                         </button>
-                        <button className="w-full flex items-center justify-between p-4 bg-transparent hover:bg-destructive/10 transition-colors border-b border-border/50 text-destructive">
+                        <button
+                            onClick={handleLogout}
+                            className="w-full flex items-center justify-between p-4 bg-transparent hover:bg-destructive/10 transition-colors border-b border-border/50 text-destructive"
+                        >
                             <div className="flex items-center gap-3">
                                 <LogOut className="h-5 w-5" />
                                 <span className="font-medium">Log out</span>
