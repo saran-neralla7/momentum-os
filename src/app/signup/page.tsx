@@ -130,13 +130,13 @@ export default function SignupPage() {
                     {step === 2 && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Enter 6-Digit OTP</label>
+                                <label className="text-sm font-medium">Enter 8-Digit OTP</label>
                                 <input
                                     type="text"
-                                    maxLength={6}
+                                    maxLength={8}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value)}
-                                    placeholder="123456"
+                                    placeholder="12345678"
                                     className="flex h-12 w-full text-center tracking-[0.5em] font-mono text-xl rounded-2xl border border-input bg-transparent px-4 py-2 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                 />
                             </div>
