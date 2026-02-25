@@ -139,13 +139,22 @@ export default function LoginPage() {
                     <div className="flex flex-col gap-3 pt-2">
                         {view === 'default' ? (
                             <>
-                                <button
-                                    onClick={() => handleAuth(false)}
-                                    disabled={loading || !email || !password}
-                                    className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground font-medium transition-transform hover:scale-[0.98] active:scale-[0.95] disabled:opacity-50 disabled:pointer-events-none"
-                                >
-                                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign In / Create Account"}
-                                </button>
+                                <div className="flex gap-2 w-full">
+                                    <button
+                                        onClick={() => handleAuth(false)}
+                                        disabled={loading || !email || !password}
+                                        className="flex-1 h-12 flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground font-medium transition-transform hover:scale-[0.98] active:scale-[0.95] disabled:opacity-50 disabled:pointer-events-none"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign In"}
+                                    </button>
+                                    <button
+                                        onClick={() => handleAuth(true)}
+                                        disabled={loading || !email || !password}
+                                        className="flex-1 h-12 flex items-center justify-center gap-2 rounded-2xl bg-secondary focus:bg-primary focus:text-primary-foreground text-secondary-foreground font-medium transition-transform hover:scale-[0.98] active:scale-[0.95] disabled:opacity-50 disabled:pointer-events-none"
+                                    >
+                                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Sign Up"}
+                                    </button>
+                                </div>
 
                                 <div className="flex items-center gap-2 pt-2">
                                     <button
