@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, CheckCircle2, Circle, Clock, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Clock, X, Trash2, AlertTriangle, Timer, Skull } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { hapticFeedback } from '@/lib/utils';
 import confetti from 'canvas-confetti';
@@ -20,6 +20,33 @@ export default function TasksPage() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskDue, setNewTaskDue] = useState('');
+    const [doomsdayTask, setDoomsdayTask] = useState<Task | null>(null);
+    const [doomsdayTimeLeft, setDoomsdayTimeLeft] = useState(300); // 5 minutes
+
+    // Doomsday Timer Logic
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (doomsdayTask && doomsdayTimeLeft > 0) {
+            interval = setInterval(() => {
+                setDoomsdayTimeLeft((prev) => prev - 1);
+                // Heartbeat haptic every 10 seconds or when time is running low
+                if (doomsdayTimeLeft <= 60 && doomsdayTimeLeft % 2 === 0) {
+                    hapticFeedback.medium();
+                } else if (doomsdayTimeLeft % 10 === 0) {
+                    hapticFeedback.light();
+                }
+            }, 1000);
+        } else if (doomsdayTimeLeft === 0) {
+            hapticFeedback.heavy();
+        }
+        return () => clearInterval(interval);
+    }, [doomsdayTask, doomsdayTimeLeft]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
 
     useEffect(() => {
         const fetchTasks = async () => {
@@ -175,13 +202,28 @@ export default function TasksPage() {
                                             </div>
                                         </div>
 
+                                        {overdue && !task.completed && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    hapticFeedback.heavy();
+                                                    setDoomsdayTimeLeft(300);
+                                                    setDoomsdayTask(task);
+                                                }}
+                                                className="shrink-0 mr-2 px-3 py-1.5 bg-destructive text-destructive-foreground text-xs font-bold uppercase tracking-wider rounded-lg shadow-sm hover:bg-destructive/90 transition-colors animate-pulse cursor-pointer"
+                                            >
+                                                Execute
+                                            </button>
+                                        )}
+
                                         <button
                                             onClick={(e) => deleteTask(task.id, e)}
-                                            className="shrink-0 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors focus:outline-none"
+                                            className="shrink-0 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors focus:outline-none cursor-pointer"
                                             aria-label="Delete task"
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </button>
+
                                     </motion.div>
                                 );
                             })}
@@ -238,6 +280,63 @@ export default function TasksPage() {
                                     </button>
                                 </div>
                             </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Doomsday Timer Overlay */}
+                <AnimatePresence>
+                    {doomsdayTask && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 1.1 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="fixed inset-0 z-[200] bg-black text-white flex flex-col items-center justify-center p-6 overflow-hidden"
+                        >
+                            {/* Pulsing red background gradient */}
+                            <motion.div
+                                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                                transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                                className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/60 via-black to-black pointer-events-none"
+                            />
+
+                            <button
+                                onClick={() => setDoomsdayTask(null)}
+                                className="absolute top-8 right-8 p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-50 cursor-pointer"
+                            >
+                                <X className="h-6 w-6" />
+                            </button>
+
+                            <div className="relative z-10 flex flex-col items-center text-center max-w-sm">
+                                <motion.div
+                                    animate={{ scale: [1, 1.1, 1] }}
+                                    transition={{ repeat: Infinity, duration: 1 }}
+                                    className="mb-8"
+                                >
+                                    <Skull className="h-16 w-16 text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                                </motion.div>
+
+                                <h2 className="text-xl font-medium tracking-widest text-red-400 uppercase mb-2">Doomsday Protocol</h2>
+                                <h1 className="text-4xl sm:text-5xl font-black mb-12 leading-tight">{doomsdayTask.title}</h1>
+
+                                <div className="text-8xl sm:text-9xl font-black font-mono tracking-tighter tabular-nums drop-shadow-[0_0_20px_rgba(239,68,68,0.5)] mb-12">
+                                    {formatTime(doomsdayTimeLeft)}
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        toggleTask(doomsdayTask);
+                                        setDoomsdayTask(null);
+                                    }}
+                                    className="w-full h-16 bg-red-600 text-white rounded-2xl font-black text-xl tracking-widest uppercase shadow-[0_0_30px_rgba(239,68,68,0.4)] hover:shadow-[0_0_50px_rgba(239,68,68,0.6)] hover:bg-red-500 transition-all active:scale-95 cursor-pointer"
+                                >
+                                    Mission Accomplished
+                                </button>
+
+                                {doomsdayTimeLeft === 0 && (
+                                    <p className="mt-6 text-red-500 font-bold animate-pulse">TIME IS UP. NO EXCUSES.</p>
+                                )}
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>

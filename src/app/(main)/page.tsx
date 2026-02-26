@@ -1,34 +1,37 @@
 'use client';
 
-import { getDynamicGreeting, calculateMomentumScore } from '@/lib/utils';
+import { getDynamicGreeting, calculateMomentumScore, hapticFeedback } from '@/lib/utils';
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import MascotOrb from '@/components/ui/MascotOrb';
-import { Share, Sparkles, X } from 'lucide-react';
+import { Share, Sparkles, X, Smartphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useLanguage } from '@/lib/LanguageContext';
 import { supabase } from '@/lib/supabase';
+import { useMomentum } from '@/contexts/MomentumContext';
 
 export default function DashboardPage() {
     const { t } = useLanguage();
     const [greeting, setGreeting] = useState('');
     const [showAiInsight, setShowAiInsight] = useState(false);
     const [activeRoast, setActiveRoast] = useState('roast_1');
-    const [score, setScore] = useState(0);
+    const { score, refreshScore } = useMomentum();
     const [monthlyExpense, setMonthlyExpense] = useState(0);
     const [expenseData, setExpenseData] = useState<any[]>([]);
     const dashboardRef = useRef<HTMLDivElement>(null);
+    const lockscreenRef = useRef<HTMLDivElement>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     const [budgetLimit, setBudgetLimit] = useState(3000);
 
     useEffect(() => {
         setGreeting(getDynamicGreeting());
 
-        const fetchDashboardData = async () => {
+        const fetchDashboardCharts = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                // Fetch expenses
+                // Fetch expenses for chart
                 const now = new Date();
                 const currentMonth = now.getMonth();
                 const currentYear = now.getFullYear();
@@ -47,55 +50,65 @@ export default function DashboardPage() {
                 setMonthlyExpense(totalExp);
                 setExpenseData(chartPoints);
 
-                // Fetch real budget
-                let currentBudget = 3000;
+                // Fetch real budget setting for UI display
                 const { data: budgetData } = await supabase.from('budgets').select('limit_amount').eq('user_id', user.id).eq('category', 'Monthly').single();
                 if (budgetData) {
-                    currentBudget = budgetData.limit_amount;
-                    setBudgetLimit(currentBudget);
-                }
-
-                // Fetch habits and real recent logs
-                const { data: habits } = await supabase.from('habits').select('id').eq('user_id', user.id);
-                if (habits) {
-                    const thirtyDaysAgo = new Date();
-                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                    const { data: recentLogs } = await supabase.from('habit_logs')
-                        .select('habit_id, date')
-                        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-                        .eq('completed', true);
-
-                    const todayStr = new Date().toISOString().split('T')[0];
-
-                    const realHabits = habits.map(h => {
-                        const logs = recentLogs?.filter(l => l.habit_id === h.id) || [];
-                        const completedToday = logs.some(l => l.date === todayStr);
-                        // Approximate streak to log count in 30 days for score
-                        return { streak: logs.length, completed: completedToday };
-                    });
-
-                    setScore(calculateMomentumScore(realHabits, totalExp, currentBudget));
+                    setBudgetLimit(budgetData.limit_amount);
                 }
             }
         };
-        fetchDashboardData();
-    }, []);
+        fetchDashboardCharts();
+        refreshScore();
+    }, [refreshScore]);
 
     const exportDashboard = async () => {
-        if (!dashboardRef.current) return;
+        if (!lockscreenRef.current) return;
+        setIsExporting(true);
+        hapticFeedback.medium();
+
+        // Brief delay to ensure the off-screen template is rendered if depending on state
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         try {
-            const canvas = await html2canvas(dashboardRef.current, {
+            const canvas = await html2canvas(lockscreenRef.current, {
                 backgroundColor: '#000000',
-                scale: 2,
+                scale: 3, // High-res export
+                width: 400,
+                height: 711,
+                useCORS: true,
+                logging: false
             });
             const image = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.href = image;
-            link.download = 'Momentum-Summary.png';
-            link.click();
+
+            // Try Native Share API first
+            if (navigator.share) {
+                try {
+                    const blob = await (await fetch(image)).blob();
+                    const file = new File([blob], 'Momentum-Lockscreen.png', { type: 'image/png' });
+                    await navigator.share({
+                        title: 'My Momentum Summary',
+                        files: [file]
+                    });
+                } catch (shareError) {
+                    console.log("Share API fall through:", shareError);
+                    fallbackDownload(image);
+                }
+            } else {
+                fallbackDownload(image);
+            }
+            hapticFeedback.heavy();
         } catch (error) {
             console.error('Failed to export dashboard:', error);
+        } finally {
+            setIsExporting(false);
         }
+    };
+
+    const fallbackDownload = (image: string) => {
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = 'Momentum-Lockscreen.png';
+        link.click();
     };
 
     return (
@@ -116,13 +129,18 @@ export default function DashboardPage() {
                         >
                             <Sparkles className="h-5 w-5" />
                         </button>
-                        <button onClick={exportDashboard} className="h-10 w-10 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors">
-                            <Share className="h-5 w-5" />
+                        <button
+                            onClick={exportDashboard}
+                            disabled={isExporting}
+                            className={`h-10 px-4 flex items-center justify-center gap-2 rounded-full font-medium transition-colors ${isExporting ? 'bg-primary text-primary-foreground animate-pulse' : 'bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground'}`}
+                        >
+                            <Smartphone className="h-4 w-4" />
+                            <span className="text-sm">{isExporting ? 'Saving...' : 'Wallpaper'}</span>
                         </button>
                     </div>
                 </header>
 
-                <MascotOrb score={score} />
+                <MascotOrb />
 
                 {/* Main Widgets Container */}
                 <div className="grid grid-cols-2 gap-4">
@@ -224,6 +242,57 @@ export default function DashboardPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Hidden Lockscreen Export Template (9:16 aspect ratio) */}
+            <div className={`fixed inset-0 pointer-events-none flex items-center justify-center z-[-50] ${isExporting ? 'opacity-100' : 'opacity-0'}`}>
+                <div
+                    ref={lockscreenRef}
+                    className="w-[400px] h-[711px] bg-black text-white relative overflow-hidden flex flex-col p-8 font-sans"
+                >
+                    {/* Animated Premium Background Elements */}
+                    <div className="absolute top-[-10%] right-[-10%] w-[300px] h-[300px] bg-primary/40 blur-[80px] rounded-full" />
+                    <div className="absolute bottom-[-10%] left-[-10%] w-[350px] h-[350px] bg-indigo-600/30 blur-[100px] rounded-full" />
+                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+
+                    <div className="relative z-10 text-center mt-12 mb-auto">
+                        <p className="text-xl font-medium tracking-widest text-white/50 uppercase">Momentum Report</p>
+                        <h1 className="text-4xl font-bold mt-2 tracking-tight">
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </h1>
+                    </div>
+
+                    <div className="relative z-10 space-y-6 mb-16">
+                        {/* Score Card */}
+                        <div className="relative p-6 bg-white/5 border border-white/20 rounded-3xl backdrop-blur-2xl shadow-2xl">
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-3xl pointer-events-none" />
+                            <p className="text-xs font-bold text-white/50 uppercase tracking-[0.2em]">Momentum Score</p>
+                            <div className="text-7xl font-black mt-2 bg-gradient-to-br from-white to-white/70 bg-clip-text text-transparent drop-shadow-lg leading-tight">
+                                {score}
+                            </div>
+                            <p className="text-sm mt-2 text-primary/80 font-medium">Top 5% performer 🔥</p>
+                        </div>
+
+                        {/* Financial Card */}
+                        <div className="relative p-6 bg-white/5 border border-white/20 rounded-3xl backdrop-blur-2xl shadow-2xl">
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent rounded-3xl pointer-events-none" />
+                            <p className="text-xs font-bold text-white/50 uppercase tracking-[0.2em]">Spent This Month</p>
+                            <div className="text-5xl font-bold mt-2 text-white/90 tracking-tight">
+                                ₹{monthlyExpense.toLocaleString()}
+                            </div>
+                            <div className="w-full bg-white/10 h-2 rounded-full mt-4 overflow-hidden">
+                                <div
+                                    className="h-full bg-primary rounded-full transition-all"
+                                    style={{ width: `${Math.min(100, (monthlyExpense / budgetLimit) * 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="relative z-10 text-center mt-auto pb-4 opacity-40 text-[10px] font-mono uppercase tracking-[0.3em] flex items-center justify-center gap-2">
+                        <Sparkles className="h-3 w-3" /> Built with Momentum OS
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

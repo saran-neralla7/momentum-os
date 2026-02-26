@@ -2,17 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, CheckCircle2, Circle, Flame, Activity, X, PenLine, Heart } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Flame, Activity, X, PenLine, ShieldAlert } from 'lucide-react';
 import { hapticFeedback } from '@/lib/utils';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { supabase } from '@/lib/supabase';
+import { useMomentum } from '@/contexts/MomentumContext';
+import MilestoneTrophy from '@/components/ui/MilestoneTrophy';
 
 export default function HabitsPage() {
+    const { freezes } = useMomentum();
     const [items, setItems] = useState<any[]>([]);
     const [contextModalOpen, setContextModalOpen] = useState<{ isOpen: boolean, habitId: string | number | null }>({ isOpen: false, habitId: null });
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showMilestone, setShowMilestone] = useState<number | null>(null);
     const [newHabitTitle, setNewHabitTitle] = useState('');
+    const [newHabitDays, setNewHabitDays] = useState<string[]>(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
     const calendarDates = Array.from({ length: 15 }).map((_, i) => {
@@ -34,6 +39,10 @@ export default function HabitsPage() {
             if (user) {
                 const { data } = await supabase.from('habits').select('*').eq('user_id', user.id);
                 if (data) {
+                    // Fetch Freezes
+                    const { data: profile } = await supabase.from('profiles').select('freezes_available').eq('id', user.id).single();
+                    let freezesAvailable = profile?.freezes_available || 0;
+
                     // Fetch completed logs for last 30 days to calculate stats and streaks
                     const thirtyDaysAgo = new Date();
                     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -49,36 +58,49 @@ export default function HabitsPage() {
                         const habitLogs = allLogs?.filter(l => l.habit_id === d.id) || [];
                         const completedCount = habitLogs.length;
 
+                        // Parse frequency logic (Daily vs Specific Days)
+                        let reqDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                        if (typeof d.frequency === 'object' && Array.isArray(d.frequency)) {
+                            reqDays = d.frequency;
+                        }
+
                         // Calculate current streak
                         let currentStreak = 0;
                         const completedDates = new Set(habitLogs.map(l => l.date));
+                        let localFreezes = freezesAvailable;
 
                         const checkDate = new Date();
                         const todayStr = checkDate.toISOString().split('T')[0];
-                        checkDate.setDate(checkDate.getDate() - 1);
-                        const yesterdayStr = checkDate.toISOString().split('T')[0];
 
-                        // Determine if streak is alive
                         let streakCheckDate: Date | null = new Date();
-                        if (!completedDates.has(todayStr) && completedDates.has(yesterdayStr)) {
-                            // Streak alive from yesterday
-                            streakCheckDate = new Date();
-                            streakCheckDate.setDate(streakCheckDate.getDate() - 1);
-                        } else if (!completedDates.has(todayStr)) {
-                            // Broken streak
-                            streakCheckDate = null;
-                        }
 
-                        if (streakCheckDate) {
-                            for (let i = 0; i < 30; i++) {
-                                const dStr = streakCheckDate.toISOString().split('T')[0];
+                        // Check if streak is alive looking backwards
+                        for (let i = 0; i < 30; i++) {
+                            const dStr = streakCheckDate.toISOString().split('T')[0];
+                            const dName = streakCheckDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+                            // If today is a required day but not completed, just skip checking today (can complete it later)
+                            if (dStr === todayStr && !completedDates.has(dStr)) {
+                                streakCheckDate.setDate(streakCheckDate.getDate() - 1);
+                                continue;
+                            }
+
+                            // If it's a required day
+                            if (reqDays.includes(dName) || d.frequency === 'daily') {
                                 if (completedDates.has(dStr)) {
                                     currentStreak++;
-                                    streakCheckDate.setDate(streakCheckDate.getDate() - 1);
                                 } else {
-                                    break;
+                                    // Missed a required day. Can they freeze?
+                                    if (localFreezes > 0) {
+                                        localFreezes--;
+                                        currentStreak++;
+                                    } else {
+                                        // Streak broken
+                                        break;
+                                    }
                                 }
                             }
+                            streakCheckDate.setDate(streakCheckDate.getDate() - 1);
                         }
 
                         return {
@@ -87,6 +109,7 @@ export default function HabitsPage() {
                             streak: currentStreak,
                             completed: completedDates.has(selectedDate),
                             category: d.category || 'General',
+                            frequency: d.frequency,
                             stats: { completed: completedCount, days: 30 }
                         };
                     }));
@@ -101,7 +124,7 @@ export default function HabitsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user && newHabitTitle.trim() !== '') {
             const { data, error } = await supabase.from('habits').insert([
-                { user_id: user.id, title: newHabitTitle, frequency: 'daily', category: 'Health' }
+                { user_id: user.id, title: newHabitTitle, frequency: newHabitDays, category: 'Health' }
             ]).select();
 
             if (data && data.length > 0) {
@@ -111,9 +134,11 @@ export default function HabitsPage() {
                     streak: 0,
                     completed: false,
                     category: data[0].category,
+                    frequency: data[0].frequency,
                     stats: { completed: 0, days: 30 }
                 }]);
                 setNewHabitTitle('');
+                setNewHabitDays(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
                 setShowAddModal(false);
             }
         }
@@ -126,8 +151,14 @@ export default function HabitsPage() {
 
         hapticFeedback.light();
 
+        const newStreak = habit.streak + 1;
+        // Check for Milestones (10, 21, 50, 100)
+        if (newStreak === 10 || newStreak === 21 || newStreak === 50 || newStreak === 100) {
+            setShowMilestone(newStreak);
+        }
+
         // Optimistic UI Update
-        setItems(items.map(h => h.id === id ? { ...h, completed: true } : h));
+        setItems(items.map(h => h.id === id ? { ...h, completed: true, streak: newStreak } : h));
 
         confetti({
             particleCount: 150,
@@ -148,7 +179,14 @@ export default function HabitsPage() {
             <div className="p-6 pt-12 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-lg mx-auto bg-background min-h-screen">
                 <header className="flex justify-between items-end">
                     <div>
-                        <h1 className="text-3xl font-semibold tracking-tight">Habits</h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-semibold tracking-tight">Habits</h1>
+                            {freezes > 0 && (
+                                <span className="flex items-center gap-1 text-xs font-medium text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
+                                    <ShieldAlert className="w-3 h-3" /> {freezes} Freezes
+                                </span>
+                            )}
+                        </div>
                         <p className="text-muted-foreground mt-1">Consistency is key.</p>
                     </div>
                     <motion.button
@@ -199,7 +237,12 @@ export default function HabitsPage() {
                     <div className="absolute left-8 top-16 bottom-10 w-px bg-border/50 z-0 hidden sm:block md:block" />
 
                     <AnimatePresence>
-                        {items.map((habit, index) => (
+                        {items.filter(habit => {
+                            const dName = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short' });
+                            if (habit.frequency === 'daily') return true;
+                            if (Array.isArray(habit.frequency) && habit.frequency.includes(dName)) return true;
+                            return false;
+                        }).map((habit, index) => (
                             <div key={habit.id} className="relative z-10 w-full overflow-hidden rounded-2xl border border-border/50 bg-destructive shadow-sm">
                                 {/* Hidden Delete Background */}
                                 <div className="absolute inset-y-0 right-0 flex items-center pr-6 z-0">
@@ -343,14 +386,73 @@ export default function HabitsPage() {
                                             autoFocus
                                         />
                                     </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-muted-foreground ml-1 mb-2 block">Habit Days</label>
+                                        <div className="flex justify-between gap-1">
+                                            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                                <button
+                                                    key={day}
+                                                    onClick={() => {
+                                                        hapticFeedback.light();
+                                                        if (newHabitDays.includes(day)) {
+                                                            if (newHabitDays.length > 1) { // Prevent empty arrays
+                                                                setNewHabitDays(newHabitDays.filter(d => d !== day));
+                                                            }
+                                                        } else {
+                                                            setNewHabitDays([...newHabitDays, day]);
+                                                        }
+                                                    }}
+                                                    className={`flex-1 h-10 rounded-lg text-xs font-semibold flex items-center justify-center transition-colors border ${newHabitDays.includes(day) ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary/30 text-muted-foreground border-border/50 hover:bg-secondary/80'}`}
+                                                >
+                                                    {day[0]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <button
                                         onClick={handleAddHabit}
-                                        disabled={!newHabitTitle}
-                                        className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                                        disabled={!newHabitTitle || newHabitDays.length === 0}
+                                        className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50 mt-2"
                                     >
                                         Create Habit
                                     </button>
                                 </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Milestone 3D Trophy Modal */}
+                <AnimatePresence>
+                    {showMilestone !== null && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[110] bg-background/90 backdrop-blur-xl flex flex-col items-center justify-center p-6"
+                        >
+                            <button onClick={() => setShowMilestone(null)} className="absolute top-6 right-6 p-3 bg-secondary/50 rounded-full hover:bg-secondary z-50">
+                                <X className="h-6 w-6 text-foreground" />
+                            </button>
+
+                            <motion.div
+                                initial={{ scale: 0.8, y: 50 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.8, y: 50, opacity: 0 }}
+                                transition={{ type: 'spring', bounce: 0.5 }}
+                                className="w-full max-w-sm relative"
+                            >
+                                <MilestoneTrophy streak={showMilestone} />
+
+                                <button
+                                    onClick={() => {
+                                        hapticFeedback.light();
+                                        setShowMilestone(null);
+                                    }}
+                                    className="w-full mt-6 h-14 bg-primary text-primary-foreground rounded-2xl font-bold shadow-xl transition-transform active:scale-95 text-lg"
+                                >
+                                    Claim Trophy
+                                </button>
                             </motion.div>
                         </motion.div>
                     )}

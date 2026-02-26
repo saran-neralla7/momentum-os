@@ -4,6 +4,8 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 
+import { useMomentum } from '@/contexts/MomentumContext';
+
 function GlowingOrb({ score }: { score: number }) {
     const meshRef = useRef<THREE.Mesh>(null);
 
@@ -44,7 +46,8 @@ function GlowingOrb({ score }: { score: number }) {
     );
 }
 
-export default function MascotOrb({ score }: { score: number }) {
+export default function MascotOrb() {
+    const { score } = useMomentum();
     return (
         <div className="w-full h-40 mt-4 relative rounded-3xl overflow-hidden bg-secondary/10 border border-border/50 backdrop-blur-sm pointer-events-none">
             <div className="absolute inset-0 flex items-center justify-center p-4 z-10 opacity-30 mt-20 pointer-events-none text-center">

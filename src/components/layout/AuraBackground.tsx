@@ -2,24 +2,12 @@
 
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMomentum } from '@/contexts/MomentumContext';
 
 export default function AuraBackground() {
     const pathname = usePathname();
 
-    // Determine glow color based on route
-    let auraColor = 'bg-primary/5'; // Default subtle primary
-
-    if (pathname.includes('/habits')) {
-        auraColor = 'bg-emerald-500/10'; // Green for growth/habits
-    } else if (pathname.includes('/expenses')) {
-        auraColor = 'bg-indigo-500/10'; // Blue/Indigo for finance
-    } else if (pathname.includes('/profile')) {
-        auraColor = 'bg-fuchsia-500/10'; // Pink/Purple for personal
-    } else if (pathname === '/') {
-        auraColor = 'bg-amber-500/10'; // Warm gold for dashboard/momentum
-    } else if (pathname.includes('/breathe')) {
-        auraColor = 'bg-cyan-500/20'; // Cool cyan for breathing
-    }
+    const { auraColor } = useMomentum();
 
     return (
         <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden flex items-start justify-center">

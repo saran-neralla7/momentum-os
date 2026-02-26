@@ -7,7 +7,7 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ['react-map-gl', 'mapbox-gl']
 };
 
 export default withPWA(nextConfig);
