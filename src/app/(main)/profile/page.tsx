@@ -1,13 +1,28 @@
 'use client';
 
-import { LogOut, Moon, Sun, Download, Trash2, ChevronRight } from 'lucide-react';
+import { LogOut, Moon, Sun, Download, Trash2, ChevronRight, BellRing, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { hapticFeedback } from '@/lib/utils';
+
+const urlB64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+};
 
 export default function ProfilePage() {
     const [userEmail, setUserEmail] = useState<string | null>(null);
+    const [userId, setUserId] = useState<string | null>(null);
+    const [isSubscribing, setIsSubscribing] = useState(false);
+    const [pushEnabled, setPushEnabled] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -15,12 +30,62 @@ export default function ProfilePage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 setUserEmail(user.email || null);
+                setUserId(user.id);
             } else {
                 router.push('/login');
             }
         };
         fetchUser();
+
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            setPushEnabled(Notification.permission === 'granted');
+        }
     }, [router]);
+
+    const handleSubscribe = async () => {
+        if (!userId || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+            alert("Push notifications are not supported by your browser.");
+            return;
+        }
+
+        setIsSubscribing(true);
+        hapticFeedback.light();
+
+        try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                throw new Error('Notification permission denied');
+            }
+
+            const registration = await navigator.serviceWorker.ready;
+
+            // Unsubscribe existing before creating new (fixes some edge cases)
+            const existingSub = await registration.pushManager.getSubscription();
+            if (existingSub) {
+                // Already subbed, but we will resend to backend just in case
+            } else {
+                const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BNKrAEc9ljhqWgn4iEwxkq6yKxcpCyu0H0zDezPsbnRtkd5yN3ogR6W0eBnTxxOO3ebJk14VkZCK6kd9ZbYN6_I';
+                const sub = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlB64ToUint8Array(vapidKey)
+                });
+
+                await fetch('/api/notifications/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscription: sub, userId })
+                });
+            }
+
+            setPushEnabled(true);
+            hapticFeedback.heavy();
+        } catch (error) {
+            console.error('Error subscribing to push:', error);
+            alert("Failed to enable notifications. Please check your browser settings.");
+        } finally {
+            setIsSubscribing(false);
+        }
+    };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -71,6 +136,23 @@ export default function ProfilePage() {
                                 <option value="ta">தமிழ் (Tamil)</option>
                             </select>
                         </div>
+                        <button
+                            onClick={handleSubscribe}
+                            disabled={pushEnabled || isSubscribing}
+                            className="w-full flex items-center justify-between p-4 bg-transparent hover:bg-secondary/50 transition-colors border-b border-border/50"
+                        >
+                            <div className="flex items-center gap-3">
+                                <BellRing className={`h-5 w-5 ${pushEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                                <span className="font-medium">Push Notifications</span>
+                            </div>
+                            {isSubscribing ? (
+                                <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                            ) : (
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${pushEnabled ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}`}>
+                                    {pushEnabled ? 'Enabled' : 'Enable'}
+                                </span>
+                            )}
+                        </button>
                         <button className="w-full flex items-center justify-between p-4 bg-transparent hover:bg-secondary/50 transition-colors border-b border-border/50">
                             <div className="flex items-center gap-3">
                                 <Moon className="h-5 w-5 text-indigo-500" />
