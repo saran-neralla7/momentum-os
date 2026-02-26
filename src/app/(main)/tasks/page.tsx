@@ -178,7 +178,7 @@ export default function TasksPage() {
                                                 : 'bg-card border-border/50 shadow-sm backdrop-blur-md hover:border-primary/30'
                                             }`}
                                     >
-                                        <div className="flex items-center gap-4 w-full">
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <button onClick={() => toggleTask(task)} className="focus:outline-none shrink-0 cursor-pointer">
                                                 {task.completed ? (
                                                     <CheckCircle2 className="h-6 w-6 text-primary" />
