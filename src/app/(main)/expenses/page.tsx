@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Coffee, ShoppingBag, Car, Home as HomeIcon, X, DollarSign, AlertOctagon } from 'lucide-react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import Map, { Marker, NavigationControl } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { supabase } from '@/lib/supabase';
 import { hapticFeedback } from '@/lib/utils';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -126,44 +124,20 @@ export default function ExpensesPage() {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (user && amount && description) {
-            setIsLocating(true);
+            const { data, error } = await supabase.from('expenses').insert([
+                { user_id: user.id, amount: expenseAmount, category, description, date: new Date().toISOString() }
+            ]).select();
 
-            // Try to get location
-            let lat = null;
-            let lng = null;
-
-            const insertExpense = async (latitude: number | null, longitude: number | null) => {
-                const { data, error } = await supabase.from('expenses').insert([
-                    { user_id: user.id, amount: expenseAmount, category, description, date: new Date().toISOString(), latitude, longitude }
-                ]).select();
-
-                if (data) {
-                    const newExpenses = [data[0], ...expenses];
-                    setExpenses(newExpenses);
-                    setMonthlyTotal(newExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0));
-                    setAmount('');
-                    setDescription('');
-                    setShowAddModal(false);
-                    setRoastBypassed(false); // Reset bypass
-                } else if (error) {
-                    console.error("Failed to insert expense:", error);
-                }
-                setIsLocating(false);
-            };
-
-            if ('geolocation' in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        insertExpense(position.coords.latitude, position.coords.longitude);
-                    },
-                    (error) => {
-                        console.warn("Location error:", error);
-                        insertExpense(null, null); // Fallback to no location
-                    },
-                    { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 }
-                );
-            } else {
-                insertExpense(null, null);
+            if (data) {
+                const newExpenses = [data[0], ...expenses];
+                setExpenses(newExpenses);
+                setMonthlyTotal(newExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0));
+                setAmount('');
+                setDescription('');
+                setShowAddModal(false);
+                setRoastBypassed(false); // Reset bypass
+            } else if (error) {
+                console.error("Failed to insert expense:", error);
             }
         }
     };
@@ -403,73 +377,7 @@ export default function ExpensesPage() {
                 </div>
             </div>
 
-            {/* Location-Based Spending Map */}
-            <div className="space-y-3 pt-4">
-                <h3 className="text-lg font-medium flex justify-between items-center">
-                    Spending Map
-                </h3>
-                <div className="w-full h-[300px] rounded-3xl overflow-hidden bg-secondary/20 border border-border/50 relative">
-                    {expenses.filter(e => e.latitude && e.longitude).length > 0 ? (
-                        <Map
-                            initialViewState={{
-                                longitude: expenses.find(e => e.longitude)?.longitude || 0,
-                                latitude: expenses.find(e => e.latitude)?.latitude || 0,
-                                zoom: 11
-                            }}
-                            mapStyle="mapbox://styles/mapbox/dark-v11"
-                            mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1Ijoic2FyYW5uZXJhbGxhIiwiYSI6ImNsdzF6czdzaDAwZzcybW82eHh6bnExbTcifQ.example_token"}
-                            attributionControl={false}
-                        >
-                            <NavigationControl position="bottom-right" />
-                            {expenses.filter(e => e.latitude && e.longitude).map((expense) => {
-                                let color = '#4F46E5';
-                                if (expense.category === 'Food & Dining') color = '#F59E0B';
-                                if (expense.category === 'Shopping') color = '#0EA5E9';
-                                if (expense.category === 'Subscription') color = '#EF4444';
 
-                                return (
-                                    <Marker
-                                        key={expense.id}
-                                        longitude={expense.longitude}
-                                        latitude={expense.latitude}
-                                    >
-                                        <div className="relative group cursor-pointer">
-                                            <div
-                                                className="w-4 h-4 rounded-full border-2 border-background shadow-lg will-change-transform"
-                                                style={{ backgroundColor: color }}
-                                            />
-                                            {/* Pulse effect */}
-                                            <div
-                                                className="absolute inset-0 rounded-full animate-ping opacity-75"
-                                                style={{ backgroundColor: color }}
-                                            />
-                                            {/* Tooltip on hover */}
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                                <span className="font-semibold block">{expense.description}</span>
-                                                <span className="opacity-80">₹{expense.amount}</span>
-                                            </div>
-                                        </div>
-                                    </Marker>
-                                );
-                            })}
-                        </Map>
-                    ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground p-6 text-center">
-                            <div className="w-16 h-16 mb-4 rounded-full bg-secondary flex items-center justify-center">
-                                <span className="text-2xl">🌍</span>
-                            </div>
-                            <h4 className="font-semibold text-foreground">No Locations Yet</h4>
-                            <p className="text-sm mt-1">Expenses logged with location permissions enabled will appear here.</p>
-                        </div>
-                    )}
-                    {/* Mapbox Token warning overlay (dev only) */}
-                    {!process.env.NEXT_PUBLIC_MAPBOX_TOKEN && expenses.filter(e => e.latitude).length > 0 && (
-                        <div className="absolute top-2 left-2 right-2 bg-destructive text-destructive-foreground text-[10px] px-2 py-1 rounded border border-destructive/50 text-center font-bold font-mono z-50">
-                            MISSING MAPBOX_TOKEN IN ENV
-                        </div>
-                    )}
-                </div>
-            </div>
 
             {/* Edit Budget Modal */}
             <AnimatePresence>
