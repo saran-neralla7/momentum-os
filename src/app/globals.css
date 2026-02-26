@@ -120,7 +120,22 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 20px);
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 20px);
   }
 }

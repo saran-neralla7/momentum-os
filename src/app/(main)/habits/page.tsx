@@ -157,7 +157,10 @@ export default function HabitsPage() {
             setShowMilestone(newStreak);
         }
 
-        // Optimistic UI Update
+        // 1. Save previous state for rollback
+        const previousItems = [...items];
+
+        // 2. Optimistic UI Update (Instant visual feedback)
         setItems(items.map(h => h.id === id ? { ...h, completed: true, streak: newStreak } : h));
 
         confetti({
@@ -167,11 +170,20 @@ export default function HabitsPage() {
             colors: ['#FF9933', '#FFFFFF', '#138808', '#FFD700']
         });
 
-        // Insert log in background
-        await supabase.from('habit_logs').upsert(
-            { habit_id: id, date: selectedDate, completed: true },
-            { onConflict: 'habit_id,date' }
-        );
+        // 3. Network Request
+        try {
+            const { error } = await supabase.from('habit_logs').upsert(
+                { habit_id: id, date: selectedDate, completed: true },
+                { onConflict: 'habit_id,date' }
+            );
+
+            if (error) throw error;
+        } catch (error) {
+            console.error("Failed to log habit:", error);
+            // 4. Rollback on Failure
+            setItems(previousItems);
+            hapticFeedback.heavy();
+        }
     };
 
     return (

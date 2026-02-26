@@ -43,4 +43,10 @@ Deploying Momentum OS to Vercel is highly optimized because Next.js and Vercel a
 The Hobby plan is highly generous, allowing for roughly 100GB of bandwidth and plenty of serverless function executions. If the app goes viral:
 - You will be notified by Vercel near bandwidth limits.
 - Upgrade to Vercel Pro ($20/mo) without changing any code.
-- Similarly, Supabase allows an easy click-to-upgrade to the Pro plan ($25/mo) if you surpass 50,000 monthly active users.
+## 7. Mapbox API Token Security (CRITICAL)
+Because `NEXT_PUBLIC_MAPBOX_TOKEN` must be exposed to the browser to render maps, it is vulnerable to quota theft by malicious actors. Once deployed to Vercel, you *must* secure it:
+1. Log into your [Mapbox Account Dashboard](https://account.mapbox.com/).
+2. Go to **Tokens** and find the token you used for `NEXT_PUBLIC_MAPBOX_TOKEN`.
+3. Scroll down to **URL Restrictions**.
+4. Add your exact Vercel production domain (e.g., `https://momentum-os.vercel.app/`).
+5. This ensures the map will *only* load on your app, and if someone steals the key to use on another website, Mapbox will reject the request.

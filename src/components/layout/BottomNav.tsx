@@ -49,7 +49,7 @@ export default function BottomNav() {
                     </motion.div>
                 )}
             </AnimatePresence>
-            <div className="flex justify-around items-center h-20 px-6 max-w-md mx-auto">
+            <div className="flex justify-around items-center h-16 sm:h-20 px-4 sm:px-6 max-w-md mx-auto">
                 {navItemsKeys.map((item) => {
                     const isActive = pathname === item.href;
                     const Icon = item.icon;
@@ -58,7 +58,7 @@ export default function BottomNav() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className="relative flex flex-col items-center justify-center w-full h-full"
+                            className="relative flex flex-col items-center justify-center w-full h-full py-2"
                         >
                             <div className="relative z-10 flex flex-col items-center gap-1">
                                 <Icon

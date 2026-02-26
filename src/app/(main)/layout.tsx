@@ -11,7 +11,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <div className="flex flex-col min-h-screen relative">
                     <AuraBackground />
                     <NotificationManager />
-                    <main className="flex-1 pb-24 overflow-x-hidden relative z-10">
+                    <main className="flex-1 pb-32 overflow-x-hidden relative z-10">
                         {children}
                     </main>
                     <BottomNav />
