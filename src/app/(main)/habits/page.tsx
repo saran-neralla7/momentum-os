@@ -20,11 +20,20 @@ export default function HabitsPage() {
             if (user) {
                 const { data } = await supabase.from('habits').select('*').eq('user_id', user.id);
                 if (data) {
+                    // Fetch today's completed logs
+                    const today = new Date().toISOString().split('T')[0];
+                    const { data: logs } = await supabase.from('habit_logs')
+                        .select('habit_id')
+                        .eq('date', today)
+                        .eq('completed', true);
+
+                    const completedHabitIds = new Set(logs?.map(l => l.habit_id) || []);
+
                     setItems(data.map(d => ({
                         id: d.id,
                         title: d.title,
                         streak: 0,
-                        completed: false,
+                        completed: completedHabitIds.has(d.id),
                         category: d.category || 'General',
                         stats: { completed: 0, days: 30 }
                     })));
@@ -56,23 +65,30 @@ export default function HabitsPage() {
             }
         }
     };
+
     const toggleHabit = async (id: string | number) => {
+        const habit = items.find(h => h.id === id);
+        // Prevent unmarking: if already completed today, do not allow changes
+        if (!habit || habit.completed) return;
+
         hapticFeedback.light();
-        setItems(items.map(h => {
-            if (h.id === id) {
-                if (!h.completed) {
-                    // Desi Gamification: Saffron, White, and Green (Tiranga/Marigold Theme)
-                    confetti({
-                        particleCount: 150,
-                        spread: 80,
-                        origin: { y: 0.6 },
-                        colors: ['#FF9933', '#FFFFFF', '#138808', '#FFD700']
-                    });
-                }
-                return { ...h, completed: !h.completed };
-            }
-            return h;
-        }));
+
+        // Optimistic UI Update
+        setItems(items.map(h => h.id === id ? { ...h, completed: true } : h));
+
+        confetti({
+            particleCount: 150,
+            spread: 80,
+            origin: { y: 0.6 },
+            colors: ['#FF9933', '#FFFFFF', '#138808', '#FFD700']
+        });
+
+        // Insert log in background
+        const today = new Date().toISOString().split('T')[0];
+        await supabase.from('habit_logs').upsert(
+            { habit_id: id, date: today, completed: true },
+            { onConflict: 'habit_id,date' }
+        );
     };
 
     return (

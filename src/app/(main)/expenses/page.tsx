@@ -15,20 +15,49 @@ export default function ExpensesPage() {
     const [category, setCategory] = useState('Food & Dining');
     const [monthlyTotal, setMonthlyTotal] = useState(0);
 
+    const [budgetLimit, setBudgetLimit] = useState(3000);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
+    const [newBudgetInput, setNewBudgetInput] = useState('');
+
     useEffect(() => {
-        const fetchExpenses = async () => {
+        const fetchExpensesAndBudget = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                const { data } = await supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false });
-                if (data) {
-                    setExpenses(data);
-                    const total = data.reduce((sum, exp) => sum + Number(exp.amount), 0);
+                // Fetch Expenses
+                const { data: expData } = await supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false });
+                if (expData) {
+                    setExpenses(expData);
+                    const total = expData.reduce((sum, exp) => sum + Number(exp.amount), 0);
                     setMonthlyTotal(total);
+                }
+
+                // Fetch Budget
+                const { data: budgetData } = await supabase.from('budgets').select('limit_amount').eq('user_id', user.id).eq('category', 'Monthly').single();
+                if (budgetData) {
+                    setBudgetLimit(budgetData.limit_amount);
                 }
             }
         };
-        fetchExpenses();
+        fetchExpensesAndBudget();
     }, []);
+
+    const handleUpdateBudget = async () => {
+        hapticFeedback.light();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && newBudgetInput) {
+            const amount = Number(newBudgetInput);
+            const { error } = await supabase.from('budgets').upsert(
+                { user_id: user.id, category: 'Monthly', limit_amount: amount },
+                { onConflict: 'user_id,category' }
+            );
+
+            if (!error) {
+                setBudgetLimit(amount);
+                setNewBudgetInput('');
+                setShowBudgetModal(false);
+            }
+        }
+    };
 
     const handleAddExpense = async () => {
         hapticFeedback.light();
@@ -71,9 +100,15 @@ export default function ExpensesPage() {
                     <p className="text-sm font-medium text-muted-foreground">This Month</p>
                     <div className="text-3xl font-semibold mt-1">₹{monthlyTotal.toLocaleString()}<span className="text-xl text-muted-foreground">.00</span></div>
                 </div>
-                <div className="bg-card p-4 rounded-3xl border border-border/50 shadow-sm">
+                <div
+                    className="bg-secondary/50 hover:bg-secondary cursor-pointer p-4 rounded-3xl border border-border/50 shadow-sm transition-colors"
+                    onClick={() => {
+                        setNewBudgetInput(budgetLimit.toString());
+                        setShowBudgetModal(true);
+                    }}
+                >
                     <p className="text-sm font-medium text-muted-foreground">Budget Limit</p>
-                    <div className="text-xl font-medium mt-1">₹3,000</div>
+                    <div className="text-xl font-medium mt-1">₹{budgetLimit.toLocaleString()}</div>
                 </div>
             </div>
 
@@ -215,6 +250,50 @@ export default function ExpensesPage() {
                     )}
                 </div>
             </div>
+
+            {/* Edit Budget Modal */}
+            <AnimatePresence>
+                {showBudgetModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 100 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 100 }}
+                            className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
+                        >
+                            <button onClick={() => setShowBudgetModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary">
+                                <X className="h-4 w-4" />
+                            </button>
+                            <h2 className="text-xl font-bold tracking-tight mb-4">Set Monthly Budget</h2>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground ml-1">Limit (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={newBudgetInput}
+                                        onChange={(e) => setNewBudgetInput(e.target.value)}
+                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+                                        placeholder="E.g., 5000"
+                                        autoFocus
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleUpdateBudget}
+                                    disabled={!newBudgetInput}
+                                    className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50 mt-2"
+                                >
+                                    Save Limit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Add Expense Modal */}
             <AnimatePresence>
