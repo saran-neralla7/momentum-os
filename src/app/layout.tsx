@@ -22,6 +22,10 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     capable: true,
   },
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({
