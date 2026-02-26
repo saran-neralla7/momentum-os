@@ -273,12 +273,12 @@ export default function ExpensesPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 pb-safe"
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 100 }}
+                            initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 100 }}
+                            exit={{ scale: 0.9, y: 20 }}
                             className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
                         >
                             <button onClick={() => setShowBudgetModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary">
@@ -317,12 +317,12 @@ export default function ExpensesPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                        className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 pb-safe"
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 100 }}
+                            initial={{ scale: 0.9, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 100 }}
+                            exit={{ scale: 0.9, y: 20 }}
                             className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
                         >
                             <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary">

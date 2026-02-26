@@ -145,10 +145,10 @@ export default function TasksPage() {
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.9, height: 0, overflow: 'hidden', padding: 0, margin: 0, borderWidth: 0 }}
                                         className={`relative z-10 p-4 border flex items-center justify-between transition-colors m-0 rounded-2xl group ${task.completed
-                                                ? 'bg-primary/5 border-primary/10 opacity-60'
-                                                : overdue
-                                                    ? 'bg-destructive/10 border-destructive/30 shadow-sm'
-                                                    : 'bg-card border-border/50 shadow-sm backdrop-blur-md hover:border-primary/30'
+                                            ? 'bg-primary/5 border-primary/10 opacity-60'
+                                            : overdue
+                                                ? 'bg-destructive/10 border-destructive/30 shadow-sm'
+                                                : 'bg-card border-border/50 shadow-sm backdrop-blur-md hover:border-primary/30'
                                             }`}
                                     >
                                         <div className="flex items-center gap-4 w-full">
@@ -196,12 +196,12 @@ export default function TasksPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4 sm:p-6 pb-safe"
+                            className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 pb-safe"
                         >
                             <motion.div
-                                initial={{ scale: 0.9, y: 100 }}
+                                initial={{ scale: 0.9, y: 20 }}
                                 animate={{ scale: 1, y: 0 }}
-                                exit={{ scale: 0.9, y: 100 }}
+                                exit={{ scale: 0.9, y: 20 }}
                                 className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
                             >
                                 <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary cursor-pointer transition-colors">
