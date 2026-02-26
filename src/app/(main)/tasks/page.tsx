@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, CheckCircle2, Circle, Clock, X, AlertTriangle } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Clock, X, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { hapticFeedback } from '@/lib/utils';
 import confetti from 'canvas-confetti';
@@ -47,7 +47,7 @@ export default function TasksPage() {
             ]).select();
 
             if (data && data.length > 0) {
-                const newTasks = [...tasks, data[0]].sort((a, b) => new Date(a.due_time).getTime() - new Date(b.due_time).getTime());
+                const newTasks = [...tasks, data[0] as Task].sort((a, b) => new Date(a.due_time).getTime() - new Date(b.due_time).getTime());
                 setTasks(newTasks);
                 setNewTaskTitle('');
                 setNewTaskDue('');
@@ -81,6 +81,17 @@ export default function TasksPage() {
         }
     };
 
+    const deleteTask = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        hapticFeedback.heavy();
+
+        // Optimistic delete
+        setTasks(tasks.filter(t => t.id !== id));
+
+        // Database sync
+        await supabase.from('tasks').delete().eq('id', id);
+    };
+
     const isOverdue = (due_time: string, completed: boolean) => {
         if (completed) return false;
         return new Date(due_time).getTime() < new Date().getTime();
@@ -99,7 +110,7 @@ export default function TasksPage() {
                 <header className="flex justify-between items-end">
                     <div>
                         <h1 className="text-3xl font-semibold tracking-tight">Tasks</h1>
-                        <p className="text-muted-foreground mt-1">Beat the clock.</p>
+                        <p className="text-muted-foreground mt-1">Focus. Execute. Delete.</p>
                     </div>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -113,10 +124,14 @@ export default function TasksPage() {
 
                 <div className="space-y-4">
                     {tasks.length === 0 ? (
-                        <div className="p-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-3xl">
-                            <p>No pending tasks.</p>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="p-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-3xl bg-secondary/20"
+                        >
+                            <p>No pending targets.</p>
                             <p className="text-xs mt-1">Tap + to add one.</p>
-                        </div>
+                        </motion.div>
                     ) : (
                         <AnimatePresence>
                             {tasks.map((task) => {
@@ -128,34 +143,45 @@ export default function TasksPage() {
                                         layout
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        className={`relative z-10 p-4 border flex items-center justify-between transition-colors m-0 rounded-2xl ${task.completed
-                                                ? 'bg-primary/5 border-primary/20 opacity-60'
+                                        exit={{ opacity: 0, scale: 0.9, height: 0, overflow: 'hidden', padding: 0, margin: 0, borderWidth: 0 }}
+                                        className={`relative z-10 p-4 border flex items-center justify-between transition-colors m-0 rounded-2xl group ${task.completed
+                                                ? 'bg-primary/5 border-primary/10 opacity-60'
                                                 : overdue
-                                                    ? 'bg-destructive/10 border-destructive/30'
-                                                    : 'bg-card border-border/50 shadow-sm'
+                                                    ? 'bg-destructive/10 border-destructive/30 shadow-sm'
+                                                    : 'bg-card border-border/50 shadow-sm backdrop-blur-md hover:border-primary/30'
                                             }`}
                                     >
                                         <div className="flex items-center gap-4 w-full">
                                             <button onClick={() => toggleTask(task)} className="focus:outline-none shrink-0 cursor-pointer">
                                                 {task.completed ? (
                                                     <CheckCircle2 className="h-6 w-6 text-primary" />
+                                                ) : overdue ? (
+                                                    <Circle className="h-6 w-6 text-destructive" />
                                                 ) : (
-                                                    <Circle className={`h-6 w-6 ${overdue ? 'text-destructive' : 'text-muted-foreground'}`} />
+                                                    <Circle className="h-6 w-6 text-muted-foreground" />
                                                 )}
                                             </button>
-                                            <div className="flex-1">
-                                                <h4 className={`font-medium ${task.completed ? 'line-through text-muted-foreground' : ''} ${overdue && !task.completed ? 'text-destructive' : ''}`}>
+
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <h4 className={`font-medium truncate ${task.completed ? 'line-through text-muted-foreground' : ''} ${overdue && !task.completed ? 'text-destructive-foreground font-semibold' : ''}`}>
                                                     {task.title}
                                                 </h4>
                                                 <div className="flex items-center gap-2 mt-1">
-                                                    <span className={`text-xs flex items-center gap-1 ${overdue && !task.completed ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                                                    <span className={`text-xs flex items-center gap-1 font-medium ${overdue && !task.completed ? 'text-destructive' : 'text-muted-foreground'}`}>
                                                         {overdue && !task.completed ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                                                         {new Date(task.due_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <button
+                                            onClick={(e) => deleteTask(task.id, e)}
+                                            className="shrink-0 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors focus:outline-none"
+                                            aria-label="Delete task"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
                                     </motion.div>
                                 );
                             })}
@@ -178,24 +204,24 @@ export default function TasksPage() {
                                 exit={{ scale: 0.9, y: 100 }}
                                 className="w-full max-w-sm bg-card border border-border/50 shadow-2xl rounded-3xl p-6 relative"
                             >
-                                <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary cursor-pointer">
+                                <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 p-2 bg-secondary/50 rounded-full hover:bg-secondary cursor-pointer transition-colors">
                                     <X className="h-4 w-4" />
                                 </button>
-                                <h2 className="text-xl font-bold tracking-tight mb-4">New Task</h2>
+                                <h2 className="text-xl font-bold tracking-tight mb-4">New Target</h2>
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-sm font-medium text-muted-foreground ml-1">Task Details</label>
+                                        <label className="text-sm font-medium text-muted-foreground ml-1">What needs to be done?</label>
                                         <input
                                             type="text"
                                             value={newTaskTitle}
                                             onChange={(e) => setNewTaskTitle(e.target.value)}
                                             className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
-                                            placeholder="What needs to be done?"
+                                            placeholder="E.g., Review PRs, Buy Groceries..."
                                             autoFocus
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-muted-foreground ml-1">Due Time (Today)</label>
+                                        <label className="text-sm font-medium text-muted-foreground ml-1">Due Time</label>
                                         <input
                                             type="datetime-local"
                                             value={newTaskDue}
@@ -208,7 +234,7 @@ export default function TasksPage() {
                                         disabled={!newTaskTitle || !newTaskDue}
                                         className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50 mt-2 cursor-pointer"
                                     >
-                                        Create Timed Task
+                                        Set Timebox
                                     </button>
                                 </div>
                             </motion.div>

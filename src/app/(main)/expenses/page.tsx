@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Coffee, ShoppingBag, Car, Home as HomeIcon, X, DollarSign } from 'lucide-react';
+import { Plus, Coffee, ShoppingBag, Car, Home as HomeIcon, X, DollarSign, AlertOctagon } from 'lucide-react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { supabase } from '@/lib/supabase';
 import { hapticFeedback } from '@/lib/utils';
+import { useLanguage } from '@/lib/LanguageContext';
 
 export default function ExpensesPage() {
     const [expenses, setExpenses] = useState<any[]>([]);
@@ -18,6 +19,10 @@ export default function ExpensesPage() {
     const [budgetLimit, setBudgetLimit] = useState(3000);
     const [showBudgetModal, setShowBudgetModal] = useState(false);
     const [newBudgetInput, setNewBudgetInput] = useState('');
+
+    const { t } = useLanguage();
+    const [showRoastModal, setShowRoastModal] = useState(false);
+    const [roastBypassed, setRoastBypassed] = useState(false);
 
     useEffect(() => {
         const fetchExpensesAndBudget = async () => {
@@ -60,11 +65,20 @@ export default function ExpensesPage() {
     };
 
     const handleAddExpense = async () => {
+        const expenseAmount = Number(amount);
+
+        // Paisa-Vasool Intercept
+        if (expenseAmount >= 1000 && !roastBypassed) {
+            hapticFeedback.heavy();
+            setShowRoastModal(true);
+            return;
+        }
+
         hapticFeedback.light();
         const { data: { user } } = await supabase.auth.getUser();
         if (user && amount && description) {
             const { data, error } = await supabase.from('expenses').insert([
-                { user_id: user.id, amount: Number(amount), category, description, date: new Date().toISOString() }
+                { user_id: user.id, amount: expenseAmount, category, description, date: new Date().toISOString() }
             ]).select();
 
             if (data) {
@@ -74,6 +88,7 @@ export default function ExpensesPage() {
                 setAmount('');
                 setDescription('');
                 setShowAddModal(false);
+                setRoastBypassed(false); // Reset bypass
             }
         }
     };
@@ -297,7 +312,7 @@ export default function ExpensesPage() {
 
             {/* Add Expense Modal */}
             <AnimatePresence>
-                {showAddModal && (
+                {showAddModal && !showRoastModal && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -321,7 +336,7 @@ export default function ExpensesPage() {
                                         type="number"
                                         value={amount}
                                         onChange={(e) => setAmount(e.target.value)}
-                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
+                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base font-semibold"
                                         placeholder="0.00"
                                         autoFocus
                                     />
@@ -333,8 +348,22 @@ export default function ExpensesPage() {
                                         value={description}
                                         onChange={(e) => setDescription(e.target.value)}
                                         className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
-                                        placeholder="Coffee, Groceries..."
+                                        placeholder="E.g., Dinner with friends"
                                     />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium text-muted-foreground ml-1">Category</label>
+                                    <select
+                                        value={category}
+                                        onChange={(e) => setCategory(e.target.value)}
+                                        className="w-full mt-1 h-12 px-4 bg-secondary/30 rounded-xl border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base appearance-none"
+                                    >
+                                        <option value="Food & Dining">Food & Dining</option>
+                                        <option value="Shopping">Shopping</option>
+                                        <option value="Transportation">Transportation</option>
+                                        <option value="Subscription">Subscription</option>
+                                        <option value="Other">Other</option>
+                                    </select>
                                 </div>
                                 <button
                                     onClick={handleAddExpense}
@@ -342,6 +371,67 @@ export default function ExpensesPage() {
                                     className="w-full h-12 bg-primary text-primary-foreground rounded-xl font-medium shadow-md transition-transform active:scale-95 disabled:opacity-50 mt-2"
                                 >
                                     Log Expense
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Paisa Vasool Roast Modal */}
+            <AnimatePresence>
+                {showRoastModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[110] bg-background/90 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6 pb-safe"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.8, y: 50 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.8, y: 50, opacity: 0 }}
+                            transition={{ type: 'spring', bounce: 0.5 }}
+                            className="w-full max-w-sm bg-destructive/10 border-2 border-destructive shadow-2xl rounded-3xl p-6 relative flex flex-col items-center text-center overflow-hidden"
+                        >
+                            {/* Dramatic background effect */}
+                            <div className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
+
+                            <div className="h-16 w-16 bg-destructive/20 rounded-full flex items-center justify-center text-destructive mb-4 shadow-inner relative z-10">
+                                <AlertOctagon className="h-8 w-8" />
+                            </div>
+
+                            <h2 className="text-2xl font-black tracking-tighter text-destructive mb-2 uppercase relative z-10">
+                                Paisa-Vasool Alert
+                            </h2>
+
+                            <p className="text-foreground text-lg font-medium leading-snug mb-6 relative z-10">
+                                {Math.random() > 0.5 ? t('roast_1') : t('roast_2')}
+                            </p>
+
+                            <div className="w-full space-y-3 relative z-10">
+                                <button
+                                    onClick={() => {
+                                        hapticFeedback.light();
+                                        setShowRoastModal(false);
+                                        setRoastBypassed(false);
+                                        setAmount('');
+                                        setDescription('');
+                                        setShowAddModal(false);
+                                    }}
+                                    className="w-full h-12 bg-destructive text-destructive-foreground rounded-xl font-bold shadow-lg transition-transform active:scale-95"
+                                >
+                                    Cancel & Save Money
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        hapticFeedback.light();
+                                        setRoastBypassed(true);
+                                        setShowRoastModal(false);
+                                    }}
+                                    className="w-full h-12 bg-transparent text-muted-foreground border border-border/50 rounded-xl font-medium transition-colors hover:bg-secondary/50 active:scale-95"
+                                >
+                                    I know what I'm doing (Proceed)
                                 </button>
                             </div>
                         </motion.div>

@@ -117,8 +117,12 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            <div className="text-center pt-8">
-                <p className="text-xs text-muted-foreground">Momentum OS v1.0.0</p>
+            <div className="text-center pt-8 pb-4">
+                <p className="text-xs text-muted-foreground font-medium">Momentum OS v1.0.0</p>
+                <div className="mt-4 flex flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+                    <span className="opacity-70">Designed and Developed by</span>
+                    <span className="font-bold text-primary tracking-widest uppercase">SARAN NERALLA</span>
+                </div>
             </div>
         </div>
     );

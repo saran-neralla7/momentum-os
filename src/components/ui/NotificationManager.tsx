@@ -2,181 +2,116 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Flame, AlertCircle, IndianRupee, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { MessageSquareWarning, X } from 'lucide-react';
 import { hapticFeedback } from '@/lib/utils';
-import { usePathname } from 'next/navigation';
-
-type NotificationType = 'task_overdue' | 'expense_high' | 'habit_missed' | 'general';
-
-interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    type: NotificationType;
-    actionUrl?: string;
-}
+import { useLanguage } from '@/lib/LanguageContext';
 
 export default function NotificationManager() {
-    const [notifications, setNotifications] = useState<AppNotification[]>([]);
-    const [isVisible, setIsVisible] = useState(false);
-    const [lastCheck, setLastCheck] = useState<number>(Date.now());
-    const pathname = usePathname();
+    const [notification, setNotification] = useState<{ title: string; message: string; visible: boolean } | null>(null);
+    const { t } = useLanguage();
 
-    // The AI Persona's sarcastic templates
-    const roastTemplates = {
-        task_overdue: [
-            "Bro, '{item}' was due. Stop scrolling reels and get it done.",
-            "You missed the deadline for '{item}'. Typical.",
-            "Are you ever going to finish '{item}'? The clock is ticking.",
-        ],
-        expense_high: [
-            "₹{amount} on '{item}'? Ambani called, he wants his lifestyle back.",
-            "You just dropped ₹{amount} on '{item}'. Your wallet is crying.",
-            "Bro, ₹{amount} for '{item}'? Hope it was worth going broke for.",
-        ],
-        habit_missed: [
-            "You broke your streak for '{item}'. Disappointing but expected.",
-            "'{item}' missed. Guess consistency isn't your strong suit?",
-        ]
-    };
-
-    const getRandomRoast = (type: NotificationType, item: string, amount?: string) => {
-        const templates = roastTemplates[type as keyof typeof roastTemplates] || ["Wake up, you have things to do."];
-        const template = templates[Math.floor(Math.random() * templates.length)];
-        return template.replace('{item}', item).replace('{amount}', amount || '');
-    };
-
-    const addNotification = (notif: Omit<AppNotification, 'id'>) => {
-        const newNotif = { ...notif, id: Math.random().toString(36).substring(7) };
-        setNotifications(prev => {
-            // Prevent duplicate spam
-            if (prev.some(n => n.message === newNotif.message)) return prev;
-            return [...prev, newNotif];
-        });
-        setIsVisible(true);
-        hapticFeedback.heavy(); // Swiggy style heavy buzz when a notif drops
-    };
-
-    const dismiss = (id: string) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-        if (notifications.length <= 1) setIsVisible(false);
-    };
-
-    // Polling logic to check for overdue items
     useEffect(() => {
-        const checkStatus = async () => {
+        // Only run on the client side
+        if (typeof window === 'undefined') return;
+
+        let hasFiredThisSession = false;
+
+        const checkDataForNotifications = async () => {
+            if (hasFiredThisSession) return; // Only annoy once per session for now
+
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            const now = new Date();
-
-            // 1. Check Tasks
+            // Scenario 1: Overdue Task
             const { data: tasks } = await supabase
                 .from('tasks')
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('completed', false);
 
-            if (tasks) {
-                tasks.forEach(task => {
-                    const due = new Date(task.due_time);
-                    // If overdue and haven't notified in the last 5 mins (or ever if just loaded)
-                    if (now.getTime() > due.getTime() && (now.getTime() - due.getTime()) < 5 * 60000) {
-                        addNotification({
-                            title: "Time's Up!",
-                            message: getRandomRoast('task_overdue', task.title),
-                            type: 'task_overdue',
-                            actionUrl: '/tasks'
-                        });
-                    }
-                });
+            if (tasks && tasks.length > 0) {
+                const now = new Date().getTime();
+                const overdue = tasks.filter(t => new Date(t.due_time).getTime() < now);
+
+                if (overdue.length > 0) {
+                    setNotification({
+                        title: "Wake up!",
+                        message: `You have ${overdue.length} overdue task(s). The clock is ticking, get it done.`,
+                        visible: true
+                    });
+                    hasFiredThisSession = true;
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    return;
+                }
             }
 
-            // 2. Check Expenses (e.g. any single expense > 1000 today)
-            const today = now.toISOString().split('T')[0];
-            const { data: expenses } = await supabase
-                .from('expenses')
-                .select('*')
-                .eq('user_id', user.id)
-                .gte('date', today);
+            // Scenario 2: High Spending Velocity (Over 80% of Budget)
+            const { data: expenses } = await supabase.from('expenses').select('amount').eq('user_id', user.id);
+            const { data: budget } = await supabase.from('budgets').select('limit_amount').eq('user_id', user.id).eq('category', 'Monthly').single();
 
-            if (expenses) {
-                expenses.forEach(exp => {
-                    if (Number(exp.amount) >= 1000) {
-                        // Check if we already created a notification closely to the creation time (rough heuristic)
-                        const expTime = new Date(exp.created_at).getTime();
-                        if (now.getTime() - expTime < 2 * 60000) { // Just added within 2 mins
-                            addNotification({
-                                title: "Paisa Vasool Alert",
-                                message: getRandomRoast('expense_high', exp.description || exp.category, exp.amount),
-                                type: 'expense_high',
-                                actionUrl: '/expenses'
-                            });
-                        }
-                    }
-                });
+            if (expenses && budget) {
+                const totalSpent = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+                if (totalSpent > (budget.limit_amount * 0.8)) {
+                    setNotification({
+                        title: "Account Empty Soon",
+                        message: `Bro, you have spent ₹${totalSpent.toLocaleString()} already. Stop tapping your card everywhere.`,
+                        visible: true
+                    });
+                    hasFiredThisSession = true;
+                    if (navigator.vibrate) navigator.vibrate(500);
+                    return;
+                }
             }
-
-            setLastCheck(now.getTime());
         };
 
-        const interval = setInterval(checkStatus, 60000); // Check every minute
-        // Initial check slight delay to let app load
-        const timeout = setTimeout(checkStatus, 3000);
+        // Check 5 seconds after app load
+        const timeout = setTimeout(checkDataForNotifications, 5000);
 
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
+        return () => clearTimeout(timeout);
     }, []);
 
-    // Also clear notifications when route changes
+    // Auto-hide notification after 6 seconds
     useEffect(() => {
-        if (notifications.length > 0) {
-            // Optional: clear on navigation if desired
-            setIsVisible(false);
-            setTimeout(() => setNotifications([]), 300);
+        if (notification?.visible) {
+            const timer = setTimeout(() => {
+                setNotification(prev => prev ? { ...prev, visible: false } : null);
+            }, 6000);
+            return () => clearTimeout(timer);
         }
-    }, [pathname]);
-
-
-    if (notifications.length === 0 || !isVisible) return null;
-
-    const currentNotification = notifications[notifications.length - 1]; // Show most recent
-
-    const getIcon = () => {
-        switch (currentNotification.type) {
-            case 'expense_high': return <IndianRupee className="h-6 w-6 text-destructive" />;
-            case 'task_overdue': return <AlertCircle className="h-6 w-6 text-orange-500" />;
-            case 'habit_missed': return <Flame className="h-6 w-6 text-rose-500" />;
-            default: return <Bell className="h-6 w-6 text-primary" />;
-        }
-    };
+    }, [notification?.visible]);
 
     return (
         <AnimatePresence>
-            {isVisible && (
+            {notification && notification.visible && (
                 <motion.div
-                    initial={{ y: -100, opacity: 0, scale: 0.9 }}
-                    animate={{ y: 16, opacity: 1, scale: 1 }}
-                    exit={{ y: -100, opacity: 0, scale: 0.9 }}
-                    transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
-                    className="fixed top-0 left-4 right-4 z-[100] max-w-sm mx-auto"
+                    initial={{ opacity: 0, y: -50, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                    className="fixed top-safe pt-4 left-4 right-4 z-[200] flex justify-center pointer-events-none"
                 >
-                    <div className="bg-card/95 backdrop-blur-xl border border-border gap-4 shadow-2xl rounded-3xl p-4 flex items-start">
-                        <div className="p-3 bg-secondary/50 rounded-2xl shrink-0">
-                            {getIcon()}
+                    <div className="bg-background/90 backdrop-blur-xl border border-destructive/30 shadow-2xl rounded-2xl p-4 max-w-sm w-full pointer-events-auto flex items-start gap-4 shadow-destructive/10 relative overflow-hidden">
+
+                        <div className="absolute top-0 left-0 w-1 h-full bg-destructive animate-pulse" />
+
+                        <div className="h-10 w-10 bg-destructive/10 rounded-full flex items-center justify-center text-destructive shrink-0">
+                            <MessageSquareWarning className="h-5 w-5" />
                         </div>
-                        <div className="flex-1 min-w-0 pt-1">
-                            <h4 className="font-semibold text-sm tracking-tight">{currentNotification.title}</h4>
-                            <p className="text-xs text-muted-foreground mt-1 leading-snug break-words">
-                                {currentNotification.message}
+
+                        <div className="flex-1 pr-6">
+                            <h3 className="text-sm font-bold tracking-tight text-foreground uppercase">{notification.title}</h3>
+                            <p className="text-sm text-muted-foreground mt-0.5 leading-snug">
+                                {notification.message}
                             </p>
                         </div>
+
                         <button
-                            onClick={() => dismiss(currentNotification.id)}
-                            className="p-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-full transition-colors cursor-pointer"
+                            onClick={() => {
+                                hapticFeedback.light();
+                                setNotification({ ...notification, visible: false });
+                            }}
+                            className="absolute top-3 right-3 p-1.5 text-muted-foreground/50 hover:text-foreground hover:bg-secondary rounded-full transition-colors"
                         >
                             <X className="h-4 w-4" />
                         </button>
