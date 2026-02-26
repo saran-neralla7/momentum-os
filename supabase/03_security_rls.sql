@@ -3,7 +3,6 @@
 -- Run this in the Supabase SQL Editor
 
 -- 1. Ensure RLS is enabled on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
