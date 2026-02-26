@@ -13,6 +13,20 @@ export default function HabitsPage() {
     const [contextModalOpen, setContextModalOpen] = useState<{ isOpen: boolean, habitId: string | number | null }>({ isOpen: false, habitId: null });
     const [showAddModal, setShowAddModal] = useState(false);
     const [newHabitTitle, setNewHabitTitle] = useState('');
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+    const calendarDates = Array.from({ length: 15 }).map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (14 - i));
+        return d;
+    });
+
+    useEffect(() => {
+        const scroller = document.getElementById('calendar-scroller');
+        if (scroller) {
+            scroller.scrollLeft = scroller.scrollWidth;
+        }
+    }, []);
 
     useEffect(() => {
         const fetchHabits = async () => {
@@ -20,11 +34,10 @@ export default function HabitsPage() {
             if (user) {
                 const { data } = await supabase.from('habits').select('*').eq('user_id', user.id);
                 if (data) {
-                    // Fetch today's completed logs
-                    const today = new Date().toISOString().split('T')[0];
+                    // Fetch completed logs for selected date
                     const { data: logs } = await supabase.from('habit_logs')
                         .select('habit_id')
-                        .eq('date', today)
+                        .eq('date', selectedDate)
                         .eq('completed', true);
 
                     const completedHabitIds = new Set(logs?.map(l => l.habit_id) || []);
@@ -41,7 +54,7 @@ export default function HabitsPage() {
             }
         };
         fetchHabits();
-    }, []);
+    }, [selectedDate]);
 
     const handleAddHabit = async () => {
         hapticFeedback.light();
@@ -84,9 +97,8 @@ export default function HabitsPage() {
         });
 
         // Insert log in background
-        const today = new Date().toISOString().split('T')[0];
         await supabase.from('habit_logs').upsert(
-            { habit_id: id, date: today, completed: true },
+            { habit_id: id, date: selectedDate, completed: true },
             { onConflict: 'habit_id,date' }
         );
     };
@@ -109,41 +121,39 @@ export default function HabitsPage() {
                     </motion.button>
                 </header>
 
-                {/* Apple Health Sync Placeholder */}
-                <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="w-full bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center justify-between"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 bg-rose-500/20 rounded-full flex items-center justify-center text-rose-500">
-                            <Heart className="h-4 w-4" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-rose-500">Apple Health Synced</p>
-                            <p className="text-xs text-muted-foreground">Steps & workouts tracked automatically.</p>
-                        </div>
-                    </div>
-                </motion.div>
+                {/* Horizontal Calendar Scroller */}
+                <div id="calendar-scroller" className="flex overflow-x-auto gap-3 pb-4 -mx-6 px-6 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    {calendarDates.map((date) => {
+                        const dateStr = date.toISOString().split('T')[0];
+                        const isSelected = dateStr === selectedDate;
+                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                        const dayNum = date.getDate();
 
-                {/* Heatmap Preview */}
-                <div className="p-5 rounded-3xl bg-secondary/30 backdrop-blur-md border border-border/50">
-                    <h3 className="text-sm font-medium mb-3">Activity Heatmap</h3>
-                    <div className="grid grid-cols-7 gap-2">
-                        {Array.from({ length: 28 }).map((_, i) => (
-                            <div
-                                key={i}
-                                className={`aspect-square rounded-md ${Math.random() > 0.3 ? 'bg-primary/80' : 'bg-primary/20'
-                                    }`}
-                            />
-                        ))}
-                    </div>
+                        return (
+                            <button
+                                key={dateStr}
+                                onClick={() => {
+                                    hapticFeedback.light();
+                                    setSelectedDate(dateStr);
+                                }}
+                                className={`flex flex-col items-center justify-center shrink-0 w-16 h-24 rounded-3xl border transition-all snap-center ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105' : 'bg-card text-muted-foreground border-border/50 hover:border-primary/50'}`}
+                            >
+                                <span className="text-xs font-medium mb-1 opacity-80">{dayName}</span>
+                                <span className="text-xl font-bold">{dayNum}</span>
+                                <span className={`w-1.5 h-1.5 rounded-full mt-2 ${isToday ? (isSelected ? 'bg-primary-foreground' : 'bg-primary') : 'bg-transparent'}`} />
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Habits List with Dependency Chain */}
-                <div className="space-y-3 relative">
-                    <h3 className="text-lg font-medium mb-4">Today&apos;s Habits</h3>
+                <div className="space-y-3 relative mt-2">
+                    <h3 className="text-lg font-medium mb-4">
+                        {selectedDate === new Date().toISOString().split('T')[0]
+                            ? "Today's Habits"
+                            : new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </h3>
 
                     {/* Visual Dependency Chain Line */}
                     <div className="absolute left-8 top-16 bottom-10 w-px bg-border/50 z-0 hidden sm:block md:block" />
