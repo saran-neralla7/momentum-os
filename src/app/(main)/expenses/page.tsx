@@ -24,6 +24,8 @@ export default function ExpensesPage() {
     const [showRoastModal, setShowRoastModal] = useState(false);
     const [roastBypassed, setRoastBypassed] = useState(false);
 
+    const [radarData, setRadarData] = useState<any[]>([]);
+
     useEffect(() => {
         const fetchExpensesAndBudget = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -32,8 +34,51 @@ export default function ExpensesPage() {
                 const { data: expData } = await supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false });
                 if (expData) {
                     setExpenses(expData);
-                    const total = expData.reduce((sum, exp) => sum + Number(exp.amount), 0);
-                    setMonthlyTotal(total);
+
+                    const now = new Date();
+                    const currentMonth = now.getMonth();
+                    const currentYear = now.getFullYear();
+                    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+                    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+                    let currentMonthTotal = 0;
+
+                    const categories = ['Food & Dining', 'Shopping', 'Transportation', 'Subscription', 'Other'];
+                    const shortCategories = ['Food', 'Shop', 'Trans', 'Subs', 'Other'];
+
+                    const radarStats = categories.map((cat, index) => {
+                        let current = 0;
+                        let initial = 0;
+
+                        expData.forEach(exp => {
+                            const expDate = new Date(exp.date);
+                            if (exp.category === cat) {
+                                if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+                                    current += Number(exp.amount);
+                                } else if (expDate.getMonth() === lastMonth && expDate.getFullYear() === lastMonthYear) {
+                                    initial += Number(exp.amount);
+                                }
+                            }
+                        });
+
+                        return {
+                            category: shortCategories[index],
+                            initial,
+                            current,
+                            fullMark: Math.max(initial, current, 100) * 1.2
+                        };
+                    });
+
+                    // Total for this month only for budget
+                    expData.forEach(exp => {
+                        const expDate = new Date(exp.date);
+                        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+                            currentMonthTotal += Number(exp.amount);
+                        }
+                    });
+
+                    setMonthlyTotal(currentMonthTotal);
+                    setRadarData(radarStats);
                 }
 
                 // Fetch Budget
@@ -161,25 +206,26 @@ export default function ExpensesPage() {
                     className="p-5 rounded-3xl bg-secondary/20 backdrop-blur-md border border-border/50 flex flex-col items-center"
                 >
                     <div className="h-64 w-full relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={[
-                                { category: 'Food', initial: 120, current: 450, fullMark: 600 },
-                                { category: 'Shop', initial: 80, current: 300, fullMark: 500 },
-                                { category: 'Trans', initial: 50, current: 150, fullMark: 300 },
-                                { category: 'House', initial: 340, current: 340, fullMark: 800 },
-                                { category: 'Subs', initial: 20, current: 100, fullMark: 200 },
-                            ]}>
-                                <PolarGrid stroke="#333" />
-                                <PolarAngleAxis dataKey="category" tick={{ fill: '#888', fontSize: 12 }} />
-                                <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
-                                <Radar name="Last Month" dataKey="initial" stroke="#888" fill="#888" fillOpacity={0.2} />
-                                <Radar name="This Month" dataKey="current" stroke="#4F46E5" fill="#4F46E5" fillOpacity={0.5} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: 'oklch(0.12 0 0)', borderRadius: '1rem', border: 'none' }}
-                                    itemStyle={{ color: '#fff' }}
-                                />
-                            </RadarChart>
-                        </ResponsiveContainer>
+                        {radarData.length > 0 && radarData.some(d => d.initial > 0 || d.current > 0) ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                                    <PolarGrid stroke="#333" />
+                                    <PolarAngleAxis dataKey="category" tick={{ fill: '#888', fontSize: 12 }} />
+                                    <PolarRadiusAxis angle={30} domain={[0, 'dataMax']} tick={false} axisLine={false} />
+                                    <Radar name="Last Month" dataKey="initial" stroke="#888" fill="#888" fillOpacity={0.2} />
+                                    <Radar name="This Month" dataKey="current" stroke="#4F46E5" fill="#4F46E5" fillOpacity={0.5} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: 'oklch(0.12 0 0)', borderRadius: '1rem', border: 'none' }}
+                                        itemStyle={{ color: '#fff' }}
+                                    />
+                                </RadarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground text-sm gap-2">
+                                <div className="text-3xl opacity-40">🧭</div>
+                                <p>Log expenses to unlock velocity.</p>
+                            </div>
+                        )}
                     </div>
                 </motion.div>
             </div>

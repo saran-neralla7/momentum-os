@@ -34,22 +34,62 @@ export default function HabitsPage() {
             if (user) {
                 const { data } = await supabase.from('habits').select('*').eq('user_id', user.id);
                 if (data) {
-                    // Fetch completed logs for selected date
-                    const { data: logs } = await supabase.from('habit_logs')
-                        .select('habit_id')
-                        .eq('date', selectedDate)
-                        .eq('completed', true);
+                    // Fetch completed logs for last 30 days to calculate stats and streaks
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-                    const completedHabitIds = new Set(logs?.map(l => l.habit_id) || []);
+                    const { data: allLogs } = await supabase.from('habit_logs')
+                        .select('habit_id, date, completed')
+                        .gte('date', thirtyDaysAgoStr)
+                        .eq('completed', true)
+                        .order('date', { ascending: false });
 
-                    setItems(data.map(d => ({
-                        id: d.id,
-                        title: d.title,
-                        streak: 0,
-                        completed: completedHabitIds.has(d.id),
-                        category: d.category || 'General',
-                        stats: { completed: 0, days: 30 }
-                    })));
+                    setItems(data.map(d => {
+                        const habitLogs = allLogs?.filter(l => l.habit_id === d.id) || [];
+                        const completedCount = habitLogs.length;
+
+                        // Calculate current streak
+                        let currentStreak = 0;
+                        const completedDates = new Set(habitLogs.map(l => l.date));
+
+                        const checkDate = new Date();
+                        const todayStr = checkDate.toISOString().split('T')[0];
+                        checkDate.setDate(checkDate.getDate() - 1);
+                        const yesterdayStr = checkDate.toISOString().split('T')[0];
+
+                        // Determine if streak is alive
+                        let streakCheckDate: Date | null = new Date();
+                        if (!completedDates.has(todayStr) && completedDates.has(yesterdayStr)) {
+                            // Streak alive from yesterday
+                            streakCheckDate = new Date();
+                            streakCheckDate.setDate(streakCheckDate.getDate() - 1);
+                        } else if (!completedDates.has(todayStr)) {
+                            // Broken streak
+                            streakCheckDate = null;
+                        }
+
+                        if (streakCheckDate) {
+                            for (let i = 0; i < 30; i++) {
+                                const dStr = streakCheckDate.toISOString().split('T')[0];
+                                if (completedDates.has(dStr)) {
+                                    currentStreak++;
+                                    streakCheckDate.setDate(streakCheckDate.getDate() - 1);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+
+                        return {
+                            id: d.id,
+                            title: d.title,
+                            streak: currentStreak,
+                            completed: completedDates.has(selectedDate),
+                            category: d.category || 'General',
+                            stats: { completed: completedCount, days: 30 }
+                        };
+                    }));
                 }
             }
         };

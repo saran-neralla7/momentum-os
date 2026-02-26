@@ -20,6 +20,8 @@ export default function DashboardPage() {
     const [expenseData, setExpenseData] = useState<any[]>([]);
     const dashboardRef = useRef<HTMLDivElement>(null);
 
+    const [budgetLimit, setBudgetLimit] = useState(3000);
+
     useEffect(() => {
         setGreeting(getDynamicGreeting());
 
@@ -27,22 +29,52 @@ export default function DashboardPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 // Fetch expenses
+                const now = new Date();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
                 const { data: expenses } = await supabase.from('expenses').select('amount, date').eq('user_id', user.id).order('date', { ascending: true });
                 let totalExp = 0;
                 let chartPoints: any[] = [];
                 if (expenses) {
-                    totalExp = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-                    chartPoints = expenses.map(e => ({ name: new Date(e.date).getDate().toString(), value: Number(e.amount) }));
+                    const thisMonthExpenses = expenses.filter(e => {
+                        const d = new Date(e.date);
+                        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                    });
+                    totalExp = thisMonthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+                    chartPoints = thisMonthExpenses.map(e => ({ name: new Date(e.date).getDate().toString(), value: Number(e.amount) }));
                 }
                 setMonthlyExpense(totalExp);
                 setExpenseData(chartPoints);
 
-                // Fetch habits
-                const { data: habits } = await supabase.from('habits').select('*').eq('user_id', user.id);
+                // Fetch real budget
+                let currentBudget = 3000;
+                const { data: budgetData } = await supabase.from('budgets').select('limit_amount').eq('user_id', user.id).eq('category', 'Monthly').single();
+                if (budgetData) {
+                    currentBudget = budgetData.limit_amount;
+                    setBudgetLimit(currentBudget);
+                }
+
+                // Fetch habits and real recent logs
+                const { data: habits } = await supabase.from('habits').select('id').eq('user_id', user.id);
                 if (habits) {
-                    // Approximate a score for the user based on raw count for now
-                    const mappedHabits = habits.map(h => ({ streak: 1, completed: true }));
-                    setScore(calculateMomentumScore(mappedHabits, totalExp, 3000));
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    const { data: recentLogs } = await supabase.from('habit_logs')
+                        .select('habit_id, date')
+                        .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
+                        .eq('completed', true);
+
+                    const todayStr = new Date().toISOString().split('T')[0];
+
+                    const realHabits = habits.map(h => {
+                        const logs = recentLogs?.filter(l => l.habit_id === h.id) || [];
+                        const completedToday = logs.some(l => l.date === todayStr);
+                        // Approximate streak to log count in 30 days for score
+                        return { streak: logs.length, completed: completedToday };
+                    });
+
+                    setScore(calculateMomentumScore(realHabits, totalExp, currentBudget));
                 }
             }
         };
@@ -117,7 +149,7 @@ export default function DashboardPage() {
                         <p className="text-sm text-muted-foreground font-medium">Spent</p>
                         <div>
                             <div className="text-3xl font-semibold">₹{monthlyExpense.toLocaleString()}</div>
-                            <p className="text-xs text-muted-foreground mt-1">of ₹3k budget</p>
+                            <p className="text-xs text-muted-foreground mt-1">of ₹{budgetLimit >= 1000 ? `${(budgetLimit / 1000).toFixed(0)}k` : budgetLimit} budget</p>
                         </div>
                     </motion.div>
                 </div>
