@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, CheckCircle2, Circle, Flame, Activity, X, PenLine, ShieldAlert } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Flame, Activity, X, PenLine, ShieldAlert, CalendarDays } from 'lucide-react';
 import { hapticFeedback } from '@/lib/utils';
 import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { supabase } from '@/lib/supabase';
 import { useMomentum } from '@/contexts/MomentumContext';
 import MilestoneTrophy from '@/components/ui/MilestoneTrophy';
+import ActivityRingCalendar from '@/components/ui/ActivityRingCalendar';
 
 export default function HabitsPage() {
     const { freezes } = useMomentum();
@@ -16,6 +17,7 @@ export default function HabitsPage() {
     const [contextModalOpen, setContextModalOpen] = useState<{ isOpen: boolean, habitId: string | number | null }>({ isOpen: false, habitId: null });
     const [showAddModal, setShowAddModal] = useState(false);
     const [showMilestone, setShowMilestone] = useState<number | null>(null);
+    const [showActivityCalendar, setShowActivityCalendar] = useState(false);
     const [newHabitTitle, setNewHabitTitle] = useState('');
     const [newHabitDays, setNewHabitDays] = useState<string[]>(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -201,14 +203,27 @@ export default function HabitsPage() {
                         </div>
                         <p className="text-muted-foreground mt-1">Consistency is key.</p>
                     </div>
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowAddModal(true)}
-                        className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
-                    >
-                        <Plus className="h-5 w-5" />
-                    </motion.button>
+                    <div className="flex items-center gap-2">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                                hapticFeedback.light();
+                                setShowActivityCalendar(true);
+                            }}
+                            className="h-10 w-10 bg-secondary/50 hover:bg-secondary text-foreground rounded-full flex items-center justify-center shadow-sm cursor-pointer border border-border/50"
+                        >
+                            <CalendarDays className="h-4 w-4" />
+                        </motion.button>
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowAddModal(true)}
+                            className="h-10 w-10 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
+                        >
+                            <Plus className="h-5 w-5" />
+                        </motion.button>
+                    </div>
                 </header>
 
                 {/* Horizontal Calendar Scroller */}
@@ -467,6 +482,13 @@ export default function HabitsPage() {
                                 </button>
                             </motion.div>
                         </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Activity Ring Calendar Modal */}
+                <AnimatePresence>
+                    {showActivityCalendar && (
+                        <ActivityRingCalendar onClose={() => setShowActivityCalendar(false)} />
                     )}
                 </AnimatePresence>
             </div>
